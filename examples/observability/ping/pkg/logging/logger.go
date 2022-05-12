@@ -6,7 +6,7 @@
 package logging
 
 import (
-	"os"
+	"io"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -22,7 +22,7 @@ const (
 // empty, the debug name is also appended as a field to all log lines. Panics
 // if the log level is not error, warn, info or debug. Log level is expected to
 // be validated before passed to this function.
-func NewLogger(logLevel, logFormat, debugName string) log.Logger {
+func NewLogger(logLevel, logFormat, debugName string, w io.Writer) log.Logger {
 	var (
 		logger log.Logger
 		lvl    level.Option
@@ -43,9 +43,9 @@ func NewLogger(logLevel, logFormat, debugName string) log.Logger {
 		panic("unexpected log level")
 	}
 
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	logger = log.NewLogfmtLogger(log.NewSyncWriter(w))
 	if logFormat == LogFormatJSON {
-		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+		logger = log.NewJSONLogger(log.NewSyncWriter(w))
 	}
 
 	logger = level.NewFilter(logger, lvl)

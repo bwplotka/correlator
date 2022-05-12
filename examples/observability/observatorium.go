@@ -30,12 +30,12 @@ func (o *Observatorium) MetricsWriteEndpoint() string {
 }
 
 func (o *Observatorium) LogsWriteEndpoint() string {
-	return o.loki.Endpoint("http")
+	return "http://" + o.loki.Endpoint("http") + "/loki/api/v1/push"
 }
 
 func (o *Observatorium) TracesWriteEndpoint() string {
 	// TODO(bwplotka): Ideally it's thrift.
-	return o.jaeger.Endpoint("jaeger.thrift")
+	return "http://" + o.jaeger.Endpoint("jaeger.thrift") + "/api/traces"
 }
 
 func (o *Observatorium) ProfilesWriteEndpoint() string {
@@ -181,7 +181,6 @@ table_manager:
 			Image:     "grafana/loki:2.5.0",
 			User:      strconv.Itoa(os.Getuid()),
 			Command:   e2e.NewCommandWithoutEntrypoint("loki", args...),
-			Volumes:   []string{f.Dir()},
 			Readiness: e2e.NewHTTPReadinessProbe("http", "/ready", 200, 200),
 		},
 	)

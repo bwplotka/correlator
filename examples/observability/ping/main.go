@@ -39,6 +39,7 @@ var (
 	traceSamplingRatio = flag.Float64("trace-sampling-ratio", 1.0, "Sampling ratio. Currently 1.0 is best value if you wish to use exemplars.")
 	logLevel           = flag.String("log.level", "info", "Log filtering level. Possible values: \"error\", \"warn\", \"info\", \"debug\"")
 	logFormat          = flag.String("log.format", logging.LogFormatLogfmt, fmt.Sprintf("Log format to use. Possible options: %s or %s", logging.LogFormatLogfmt, logging.LogFormatJSON))
+	logFile            = flag.String("log.file", "", "File for logs.")
 )
 
 type latencyDecider struct {
@@ -144,7 +145,16 @@ func runMain() (err error) {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
-	logger := logging.NewLogger(*logLevel, *logFormat, "ping")
+	w := os.Stderr
+	if *logFile != "" {
+		f, err := os.Open(*logFile)
+		if err != nil {
+			return err
+		}
+		defer errcapture.Do(&err, f.Close, "close log file")
+		w = f
+	}
+	logger := logging.NewLogger(*logLevel, *logFormat, "ping", w)
 
 	var exporter tracing.ExporterBuilder
 	switch *traceEndpoint {
