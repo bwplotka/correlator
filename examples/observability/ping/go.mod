@@ -13,3 +13,7 @@ require (
 	go.opentelemetry.io/otel v1.6.3
 	go.opentelemetry.io/otel/trace v1.6.3
 )
+
+replace (
+	github.com/bwplotka/tracing-go => ../../../../tracing-go
+)

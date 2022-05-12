@@ -1,16 +1,14 @@
-// Copyright (c) The Thanos Authors.
-// Licensed under the Apache License 2.0.
-
 package httpinstrumentation
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/httpinstrumentation/logging"
 	"github.com/bwplotka/tracing-go/tracing"
+	tracinghttp "github.com/bwplotka/tracing-go/tracing/http"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -41,21 +39,21 @@ func NewNopMiddleware() Middleware {
 }
 
 type middleware struct {
-	reg    prometheus.Registerer
-	logger log.Logger
-	tracer *tracing.Tracer
+	reg             prometheus.Registerer
+	logMiddleware   *logging.HTTPMiddleware
+	traceMiddleware *tracinghttp.Middleware
 
 	buckets []float64
 }
 
 // NewMiddleware provides default Middleware.
 // Passing nil as buckets uses the default buckets.
-func NewMiddleware(reg prometheus.Registerer, buckets []float64, logger log.Logger, tracer *tracing.Tracer) *middleware {
+func NewMiddleware(reg prometheus.Registerer, buckets []float64, logger log.Logger, tracer *tracing.Tracer) Middleware {
 	if buckets == nil {
 		buckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
 	}
 
-	return &middleware{reg: reg, buckets: buckets, logger: logger, tracer: tracer}
+	return &middleware{reg: reg, buckets: buckets, logMiddleware: logging.NewHTTPServerMiddleware(logger), traceMiddleware: tracinghttp.NewMiddleware(tracer)}
 }
 
 // WrapHandler wraps the given HTTP handler for instrumentation:
@@ -130,46 +128,18 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 		),
 	)
 
-	if ins.logger != nil {
-		// Wrap with logging. This will be visited as a second middleware.
-		base = logging.NewHTTPServerMiddleware(ins.logger).HTTPMiddleware(handlerName, base)
+	if ins.logMiddleware != nil {
+		// Add context values that gives more context to request logging.
+		base = func(w http.ResponseWriter, r *http.Request) {
+			spanCtx := tracing.GetSpan(r.Context()).Context()
+			base.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), logging.RequestIDCtxKey, spanCtx.TraceID())))
+		}
+		base = ins.logMiddleware.WrapHandler(handlerName, base)
 	}
 
-	if ins.tracer != nil {
+	if ins.traceMiddleware != nil {
 		// Wrap with tracing. This will be visited as a first middleware.
-		// base =
+		base = ins.traceMiddleware.WrapHandler(handlerName, base)
 	}
 	return base.ServeHTTP
-}
-
-// responseWriterDelegator implements http.ResponseWriter and extracts the statusCode.
-type responseWriterDelegator struct {
-	w          http.ResponseWriter
-	written    bool
-	statusCode int
-}
-
-func (wd *responseWriterDelegator) Header() http.Header {
-	return wd.w.Header()
-}
-
-func (wd *responseWriterDelegator) Write(bytes []byte) (int, error) {
-	return wd.w.Write(bytes)
-}
-
-func (wd *responseWriterDelegator) WriteHeader(statusCode int) {
-	wd.written = true
-	wd.statusCode = statusCode
-	wd.w.WriteHeader(statusCode)
-}
-
-func (wd *responseWriterDelegator) StatusCode() int {
-	if !wd.written {
-		return http.StatusOK
-	}
-	return wd.statusCode
-}
-
-func (wd *responseWriterDelegator) Status() string {
-	return fmt.Sprintf("%d", wd.StatusCode())
 }

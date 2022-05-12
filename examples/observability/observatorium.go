@@ -255,3 +255,17 @@ search_enabled: true
 		},
 	)
 }
+
+func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
+	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
+		WithPorts(
+			map[string]int{
+				"http.front":    16686,
+				"jaeger.thrift": 16000, // OTLP is not yet implemented, sad face.
+			}, "http.front").
+		Init(e2e.StartOptions{
+			Image:   "jaegertracing/all-in-one:1.33",
+			Command: e2e.NewCommand("--collector.http-server.host-port=:16000"),
+			// TODO(bwplotka): Readiness
+		})
+}

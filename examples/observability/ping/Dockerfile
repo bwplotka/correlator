@@ -6,7 +6,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build
 RUN cd pinger && CGO_ENABLED=0 GOOS=linux go build
 
 FROM scratch
-COPY --from=build-env /tmp/workdir/app /bin/app
+
+COPY --from=build-env /tmp/workdir/ping /bin/ping
 COPY --from=build-env /tmp/workdir/pinger/pinger /bin/pinger
 
-CMD ["/bin/app"]
+CMD ["/bin/ping", "-set-version=v0.0.7", "-latency=90%500ms,10%200ms", "-success-prob=65"]

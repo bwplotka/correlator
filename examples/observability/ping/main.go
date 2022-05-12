@@ -14,29 +14,31 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bwplotka/correlator/examples/observability/ping/exthttp"
-	"github.com/go-kit/kit/log"
-
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/httpinstrumentation"
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 	"github.com/bwplotka/tracing-go/tracing"
+	"github.com/bwplotka/tracing-go/tracing/exporters/otlp"
 	"github.com/efficientgo/tools/core/pkg/errcapture"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 var (
-	latDecider *latencyDecider
-
 	// TODO(bwplotka): Move those flags out of globals.
 	addr               = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
 	appVersion         = flag.String("set-version", "first", "Injected version to be presented via metrics.")
 	lat                = flag.String("latency", "90%500ms,10%200ms", "Encoded latency and probability of the response in format as: <probability>%<duration>,<probability>%<duration>....")
 	successProb        = flag.Float64("success-prob", 100, "The probability (in %) of getting a successful response")
-	traceEndpoint      = flag.String("trace-endpoint", "tempo.demo.svc.cluster.local:9091", "The gRPC OTLP endpoint for tracing backend. Hack: Set it to 'stdout' to print traces to the output instead")
+	traceEndpoint      = flag.String("trace-endpoint", "stdout", "The gRPC OTLP endpoint for tracing backend. Hack: Set it to 'stdout' to print traces to the output instead")
 	traceSamplingRatio = flag.Float64("trace-sampling-ratio", 1.0, "Sampling ratio. Currently 1.0 is best value if you wish to use exemplars.")
+	logLevel           = flag.String("log.level", "info", "Log filtering level. Possible values: \"error\", \"warn\", \"info\", \"debug\"")
+	logFormat          = flag.String("log.format", logging.LogFormatLogfmt, fmt.Sprintf("Log format to use. Possible options: %s or %s", logging.LogFormatLogfmt, logging.LogFormatJSON))
 )
 
 type latencyDecider struct {
@@ -77,45 +79,45 @@ func newLatencyDecider(encodedLatencies string) (*latencyDecider, error) {
 	return &l, nil
 }
 
-func (l latencyDecider) AddLatency(ctx context.Context) {
-	_, span := tracing.Start(ctx, "addingLatencyBasedOnProbability")
-	defer span.End()
+func (l latencyDecider) AddLatency(ctx context.Context, logger log.Logger) {
+	_, span := tracing.StartSpan(ctx, "addingLatencyBasedOnProbability")
+	defer span.End(nil)
 
 	n := rand.Float64() * 100
-	span.SetAttributes(attribute.Array("latencyProbabilities", l.probabilities))
-	span.SetAttributes(attribute.Float64("lucky%", n))
+	span.SetAttributes("latencyProbabilities", l.probabilities, "lucky%", n)
 
 	for i, p := range l.probabilities {
 		if n <= p {
-			span.SetAttributes(attribute.String("latencyIntroduced", l.latencies[i].String()))
+			span.SetAttributes("latencyIntroduced", l.latencies[i].String())
+			level.Debug(logger).Log("msg", "adding latency based on probability", "latencyIntroduced", l.latencies[i].String(), "latencyProbabilities", l.probabilities, "lucky%", n)
 			<-time.After(l.latencies[i])
 			return
 		}
 	}
 }
 
-func EvalAlert(ctx context.Context, ruleID int) error {
-	return nil
-}
+func pingHandler(logger log.Logger, latDecider *latencyDecider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		latDecider.AddLatency(r.Context(), logger)
 
-const ruleID = 62
+		if err := tracing.DoInSpan(r.Context(), "evaluatePing", func(ctx context.Context, span tracing.Span) error {
+			span.SetAttributes("successProbability", *successProb)
+			level.Debug(logger).Log("msg", "evalutating ping", "successProbability", *successProb)
 
-func handlerPing(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tracing.Start(r.Context(), "pingHandler")
-	defer span.End()
-
-	// Do work...
-
-	tracing.DoInSpan(ctx, "handle ping", func(ctx context.Context, span tracing.Span) {
-		span.SetAttributes(attribute.Float64("successProbability", *successProb))
-
-		if rand.Float64()*100 <= *successProb {
-			w.WriteHeader(200)
-			_, _ = fmt.Fprintln(w, "pong")
+			if rand.Float64()*100 <= *successProb {
+				return nil
+			}
+			return errors.New("decided to NOT return success, sorry")
+		}); err != nil {
+			w.WriteHeader(http.StatusTeapot)
+			// Not smart to pass error straight away. Sanitize on production.
+			_, _ = fmt.Fprintln(w, err.Error())
 			return
 		}
-		w.WriteHeader(500)
-	})
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintln(w, "pong")
+	}
 }
 
 func main() {
@@ -127,48 +129,45 @@ func main() {
 }
 
 func runMain() (err error) {
-	latDecider, err = newLatencyDecider(*lat)
+	latDecider, err := newLatencyDecider(*lat)
 	if err != nil {
 		return err
 	}
 
 	version.Version = *appVersion
 
-	log.NewJSONLogger(os.Stdout)
-
+	// Setup instrumentation: Prometheus registry for metrics, logger and tracer.
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
 		version.NewCollector("app"),
-		prometheus.NewGoCollector(),
-		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
-	var tracingProvider *tracing.Provider
-	if *traceEndpoint != "" {
-		tOpts := []tracing.Option{
-			tracing.WithSampler(tracing.TraceIDRatioBasedSampler(*traceSamplingRatio)),
-			tracing.WithSvcName("demo:app"),
-		}
-		switch *traceEndpoint {
-		case "stdout":
-			tOpts = append(tOpts, tracing.WithPrinter(os.Stdout))
-		default:
-			tOpts = append(tOpts, tracing.WithOTLP(
-				tracing.WithOTLPInsecure(),
-				tracing.WithOTLPEndpoint(*traceEndpoint),
-			))
-		}
-		tp, closeFn, err := tracing.NewProvider(tOpts...)
-		if err != nil {
-			return err
-		}
-		tracingProvider = tp
-		defer errcapture.Do(&err, closeFn, "close tracers")
-		fmt.Println("Tracing enabled", *traceEndpoint)
+	logger := logging.NewLogger(*logLevel, *logFormat, "ping")
+
+	var exporter tracing.ExporterBuilder
+	switch *traceEndpoint {
+	case "stdout":
+		exporter = tracing.NewWriterExporter(os.Stdout)
+	default:
+		exporter = otlp.Exporter(*traceEndpoint, otlp.WithInsecure())
 	}
 
+	tracer, closeFn, err := tracing.NewTracer(
+		exporter,
+		tracing.WithSampler(tracing.TraceIDRatioBasedSampler(*traceSamplingRatio)),
+		tracing.WithServiceName("demo:ping"),
+	)
+	if err != nil {
+		return err
+	}
+	defer errcapture.Do(&err, closeFn, "close tracers")
+
+	level.Info(logger).Log("msg", "metrics, logs and tracing enabled", "traceEndpoint", *traceEndpoint)
+
 	m := http.NewServeMux()
-	m.Handle("/metrics", exthttp.NewInstrumentationMiddleware(reg, nil, nil).
+	m.Handle("/metrics", httpinstrumentation.NewMiddleware(reg, nil, logger, tracer).
 		WrapHandler("/metrics", promhttp.HandlerFor(
 			reg,
 			promhttp.HandlerOpts{
@@ -176,21 +175,21 @@ func runMain() (err error) {
 				EnableOpenMetrics: true,
 			},
 		)))
-	m.HandleFunc("/ping", exthttp.NewInstrumentationMiddleware(reg, nil, tracingProvider).
-		WrapHandler("/ping", http.HandlerFunc(handlerPing)))
+	m.HandleFunc("/ping", httpinstrumentation.NewMiddleware(reg, nil, logger, tracer).
+		WrapHandler("/ping", pingHandler(logger, latDecider)))
+
 	srv := http.Server{Addr: *addr, Handler: m}
 
-	// Setup multiple 2 jobs. One is for serving HTTP requests, second to listen for Linux signals like Ctrl+C.
 	g := &run.Group{}
 	g.Add(func() error {
-		fmt.Println("HTTP Server listening on", *addr)
+		level.Info(logger).Log("msg", "starting HTTP server", "addr", *addr)
 		if err := srv.ListenAndServe(); err != nil {
 			return errors.Wrap(err, "starting web server")
 		}
 		return nil
 	}, func(error) {
 		if err := srv.Close(); err != nil {
-			fmt.Println("Failed to stop web server:", err)
+			level.Error(logger).Log("msg", "failed to stop web server", "err", err)
 		}
 	})
 	g.Add(run.SignalHandler(context.Background(), syscall.SIGINT, syscall.SIGTERM))

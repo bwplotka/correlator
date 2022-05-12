@@ -47,25 +47,36 @@ func (r *ResponseWriterWithStatus) WriteHeader(code int) {
 	}
 }
 
-type HTTPServerMiddleware struct {
+type HTTPMiddleware struct {
 	opts   *options
 	logger log.Logger
 }
 
-func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Request) {
-	logger := m.opts.filterLog(m.logger)
-	level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
+var RequestIDCtxKey struct{}
+
+func (m *HTTPMiddleware) getRequestID(r *http.Request) string {
+	id, ok := r.Context().Value(RequestIDCtxKey).(string)
+	if !ok {
+		return r.Header.Get("X-Request-ID")
+	}
+	return id
 }
 
-func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *ResponseWriterWithStatus, r *http.Request) {
-	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", wrapped.Status(),
+func (m *HTTPMiddleware) preCall(name string, start time.Time, r *http.Request) {
+	logger := m.opts.filterLog(m.logger)
+
+	_ = level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", m.getRequestID(r), "thanos.method_name", name, "msg", "started call")
+}
+
+func (m *HTTPMiddleware) postCall(name string, start time.Time, wrapped *ResponseWriterWithStatus, r *http.Request) {
+	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", m.getRequestID(r), "http.status_code", wrapped.Status(),
 		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))), "http.remote_addr", r.RemoteAddr, "thanos.method_name", name)
 
 	logger = m.opts.filterLog(logger)
-	m.opts.levelFunc(logger, wrapped.StatusCode()).Log("msg", "finished call")
+	_ = m.opts.levelFunc(logger, wrapped.StatusCode()).Log("msg", "finished call")
 }
 
-func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) http.HandlerFunc {
+func (m *HTTPMiddleware) WrapHandler(name string, next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		wrapped := WrapResponseWriterWithStatus(w)
 		start := time.Now()
@@ -109,40 +120,10 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 }
 
 // NewHTTPServerMiddleware returns an http middleware.
-func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPServerMiddleware {
+func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPMiddleware {
 	o := evaluateOpt(opts)
-	return &HTTPServerMiddleware{
+	return &HTTPMiddleware{
 		logger: log.With(logger, "protocol", "http", "http.component", "server"),
 		opts:   o,
-	}
-}
-
-// getHTTPLoggingOption returns the logging ENUM based on logStart and logEnd values.
-func getHTTPLoggingOption(logStart, logEnd bool) (Decision, error) {
-	if !logStart && !logEnd {
-		return NoLogCall, nil
-	}
-	if !logStart && logEnd {
-		return LogFinishCall, nil
-	}
-	if logStart && logEnd {
-		return LogStartAndFinishCall, nil
-	}
-	return -1, fmt.Errorf("log start call is not supported")
-}
-
-// getLevel returns the level based logger.
-func getLevel(lvl string) level.Option {
-	switch lvl {
-	case "INFO":
-		return level.AllowInfo()
-	case "DEBUG":
-		return level.AllowDebug()
-	case "WARN":
-		return level.AllowWarn()
-	case "ERROR":
-		return level.AllowError()
-	default:
-		return level.AllowAll()
 	}
 }
