@@ -11,7 +11,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/common v0.32.1
-	github.com/thanos-io/thanos v0.24.1-0.20220510104309-4ebf8853d6b1
+	github.com/thanos-io/thanos v0.26.1-0.20220512105131-369b9886b8d1
 	go.opentelemetry.io/otel v1.6.3
 	go.opentelemetry.io/otel/trace v1.6.3
 )

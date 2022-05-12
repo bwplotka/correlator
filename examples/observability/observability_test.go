@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/efficientgo/e2e"
+	e2einteractive "github.com/efficientgo/e2e/interactive"
 	"github.com/efficientgo/tools/core/pkg/testutil"
 )
 
@@ -15,10 +16,19 @@ import (
 //
 // Now with this we will run "correlator" service in Observatorium that will hook into Grafana links and present a simple JSON result that allows navigating to different views and UIs.
 func TestCorrelatorWithObservability(t *testing.T) {
-	e, err := e2e.NewDockerEnvironment("e2e_correlator")
+	envObs, err := e2e.NewDockerEnvironment("e2e_correlator_observatorium")
 	testutil.Ok(t, err)
-	t.Cleanup(e.Close)
+	t.Cleanup(envObs.Close)
 
-	testutil.Ok(t, startObservatorium(e))
+	o, err := startObservatorium(envObs)
+	testutil.Ok(t, err)
 
+	//// Create remote docker environment to simulate remote setup!
+	//// TODO(bwplotka): Can container talk to another container in another network through localhost? We shall see..
+	//envClient, err := e2e.NewDockerEnvironment("e2e_correlator_client")
+	//testutil.Ok(t, err)
+	//t.Cleanup(envClient.Close)
+
+	testutil.Ok(t, e2einteractive.OpenInBrowser(o.GrafanaUI()))
+	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
