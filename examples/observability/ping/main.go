@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	stdlog "log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -13,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bwplotka/correlator/examples/observability/app/exthttp"
+	"github.com/bwplotka/correlator/examples/observability/ping/exthttp"
 	"github.com/go-kit/kit/log"
 
 	"github.com/bwplotka/tracing-go/tracing"
@@ -35,7 +36,7 @@ var (
 	lat                = flag.String("latency", "90%500ms,10%200ms", "Encoded latency and probability of the response in format as: <probability>%<duration>,<probability>%<duration>....")
 	successProb        = flag.Float64("success-prob", 100, "The probability (in %) of getting a successful response")
 	traceEndpoint      = flag.String("trace-endpoint", "tempo.demo.svc.cluster.local:9091", "The gRPC OTLP endpoint for tracing backend. Hack: Set it to 'stdout' to print traces to the output instead")
-	traceSamplingRatio = flag.Float64("trace-sampling-ratio", 1.0, "Sampling ratio")
+	traceSamplingRatio = flag.Float64("trace-sampling-ratio", 1.0, "Sampling ratio. Currently 1.0 is best value if you wish to use exemplars.")
 )
 
 type latencyDecider struct {
@@ -121,7 +122,7 @@ func main() {
 	flag.Parse()
 	if err := runMain(); err != nil {
 		// Use %+v for github.com/pkg/errors error to print with stack.
-		log.Fatalf("Error: %+v", errors.Wrapf(err, "%s", flag.Arg(0)))
+		stdlog.Fatalf("Error: %+v", errors.Wrapf(err, "%s", flag.Arg(0)))
 	}
 }
 
@@ -132,6 +133,8 @@ func runMain() (err error) {
 	}
 
 	version.Version = *appVersion
+
+	log.NewJSONLogger(os.Stdout)
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(

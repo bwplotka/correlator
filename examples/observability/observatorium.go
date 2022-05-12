@@ -185,10 +185,11 @@ table_manager:
 
 	return f.Init(
 		e2e.StartOptions{
-			Image:   "grafana/loki:2.5.0",
-			User:    strconv.Itoa(os.Getuid()),
-			Command: e2e.NewCommandWithoutEntrypoint("loki", args...),
-			Volumes: []string{f.Dir()},
+			Image:     "grafana/loki:2.5.0",
+			User:      strconv.Itoa(os.Getuid()),
+			Command:   e2e.NewCommandWithoutEntrypoint("loki", args...),
+			Volumes:   []string{f.Dir()},
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/ready", 200, 200),
 		},
 	)
 }
@@ -246,10 +247,11 @@ search_enabled: true
 
 	return f.Init(
 		e2e.StartOptions{
-			Image:   "grafana/tempo:1.4.1",
-			User:    strconv.Itoa(os.Getuid()),
-			Command: e2e.NewCommandWithoutEntrypoint("/tempo", args...),
-			Volumes: []string{f.Dir()},
+			Image:     "grafana/tempo:1.4.1",
+			User:      strconv.Itoa(os.Getuid()),
+			Command:   e2e.NewCommandWithoutEntrypoint("/tempo", args...),
+			Volumes:   []string{f.Dir()},
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/ready", 200, 200),
 		},
 	)
 }

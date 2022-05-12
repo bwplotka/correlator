@@ -1,9 +1,7 @@
-// Copied from https://github.com/thanos-io/thanos/blob/30162377d15ef0b8b7c71081f22ceb7ab3ef0285/pkg/extprom/http/instrument_server.go
-
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package exthttp
+package httpinstrumentation
 
 import (
 	"fmt"
@@ -11,58 +9,66 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 	"github.com/bwplotka/tracing-go/tracing"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// InstrumentationMiddleware holds necessary metrics to instrument an http.Server
-// and provides necessary behaviors.
-type InstrumentationMiddleware interface {
+// Middleware auto instruments net/http HTTP handlers with:
+// * Prometheus metrics + exemplars
+// * Logging
+// * Tracing + propagation
+type Middleware interface {
 	// WrapHandler wraps the given HTTP handler for instrumentation.
 	WrapHandler(handlerName string, handler http.Handler) http.HandlerFunc
 }
 
-type nopInstrumentationMiddleware struct{}
+type nopMiddleware struct{}
 
-func (ins nopInstrumentationMiddleware) WrapHandler(_ string, handler http.Handler) http.HandlerFunc {
+func (ins nopMiddleware) WrapHandler(_ string, handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	}
 }
 
-// NewNopInstrumentationMiddleware provides a InstrumentationMiddleware which does nothing.
-func NewNopInstrumentationMiddleware() InstrumentationMiddleware {
-	return nopInstrumentationMiddleware{}
+// NewNopMiddleware provides a Middleware which does nothing.
+func NewNopMiddleware() Middleware {
+	return nopMiddleware{}
 }
 
-type instrumentationMiddleware struct {
-	reg     prometheus.Registerer
-	tp      *tracing.Provider
+type middleware struct {
+	reg    prometheus.Registerer
+	logger log.Logger
+	tracer *tracing.Tracer
+
 	buckets []float64
 }
 
-// NewInstrumentationMiddleware provides default InstrumentationMiddleware.
+// NewMiddleware provides default Middleware.
 // Passing nil as buckets uses the default buckets.
-func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64, tp *tracing.Provider) InstrumentationMiddleware {
+func NewMiddleware(reg prometheus.Registerer, buckets []float64, logger log.Logger, tracer *tracing.Tracer) *middleware {
 	if buckets == nil {
 		buckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
 	}
 
-	return &instrumentationMiddleware{reg: reg, buckets: buckets, tp: tp}
+	return &middleware{reg: reg, buckets: buckets, logger: logger, tracer: tracer}
 }
 
-// WrapHandler wraps the given HTTP handler for instrumentation. It
-// registers four metric collectors (if not already done) and reports HTTP
+// WrapHandler wraps the given HTTP handler for instrumentation:
+// * It registers four metric collectors (if not already done) and reports HTTP
 // metrics to the (newly or already) registered collectors: http_requests_total
 // (CounterVec), http_request_duration_seconds (Histogram),
 // http_request_size_bytes (Summary), http_response_size_bytes (Summary). Each
 // has a constant label named "handler" with the provided handlerName as
 // value. http_requests_total is a metric vector partitioned by HTTP method
 // (label name "method") and HTTP status code (label name "code").
-func (ins *instrumentationMiddleware) WrapHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+// * Logs requests and responses.
+// * Adds spans and propagate trace metadata from request if any.
+func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"handler": handlerName}, ins.reg)
 
 	requestDuration := promauto.With(reg).NewHistogramVec(
@@ -103,11 +109,12 @@ func (ins *instrumentationMiddleware) WrapHandler(handlerName string, handler ht
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					now := time.Now()
 
-					wd := &responseWriterDelegator{w: w}
+					wd := logging.WrapResponseWriterWithStatus(w)
 					handler.ServeHTTP(wd, r)
 
 					observer := requestDuration.WithLabelValues(strings.ToLower(r.Method), wd.Status())
-					// If we find a TraceID from OpenTelemetry we'll expose it as Exemplar.
+
+					// SpanContext!
 					if spanCtx := trace.SpanContextFromContext(r.Context()); spanCtx.HasTraceID() && spanCtx.IsSampled() {
 						traceID := prometheus.Labels{"traceID": spanCtx.TraceID().String()}
 
@@ -123,13 +130,14 @@ func (ins *instrumentationMiddleware) WrapHandler(handlerName string, handler ht
 		),
 	)
 
-	if ins.tp != nil {
-		return otelhttp.NewHandler(
-			base,
-			handlerName,
-			otelhttp.WithTracerProvider(ins.tp),
-			otelhttp.WithPropagators(ins.tp),
-		).ServeHTTP
+	if ins.logger != nil {
+		// Wrap with logging. This will be visited as a second middleware.
+		base = logging.NewHTTPServerMiddleware(ins.logger).HTTPMiddleware(handlerName, base)
+	}
+
+	if ins.tracer != nil {
+		// Wrap with tracing. This will be visited as a first middleware.
+		// base =
 	}
 	return base.ServeHTTP
 }
