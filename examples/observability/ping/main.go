@@ -100,8 +100,8 @@ func pingHandler(logger log.Logger, latDecider *latencyDecider) http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		latDecider.AddLatency(r.Context(), logger)
 
-		if err := tracing.DoInSpan(r.Context(), "evaluatePing", func(ctx context.Context, span tracing.Span) error {
-			span.SetAttributes("successProbability", *successProb)
+		if err := tracing.DoInSpan(r.Context(), "evaluatePing", func(ctx context.Context) error {
+			tracing.GetSpan(ctx).SetAttributes("successProbability", *successProb)
 			level.Debug(logger).Log("msg", "evalutating ping", "successProbability", *successProb)
 
 			if rand.Float64()*100 <= *successProb {
@@ -139,7 +139,7 @@ func runMain() (err error) {
 	// Setup instrumentation: Prometheus registry for metrics, logger and tracer.
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
-		version.NewCollector("app"),
+		version.NewCollector("ping"),
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)

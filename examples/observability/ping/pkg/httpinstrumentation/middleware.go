@@ -6,14 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bwplotka/correlator/examples/observability/ping/pkg/httpinstrumentation/logging"
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 	"github.com/bwplotka/tracing-go/tracing"
 	tracinghttp "github.com/bwplotka/tracing-go/tracing/http"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Middleware auto instruments net/http HTTP handlers with:
@@ -53,7 +52,12 @@ func NewMiddleware(reg prometheus.Registerer, buckets []float64, logger log.Logg
 		buckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
 	}
 
-	return &middleware{reg: reg, buckets: buckets, logMiddleware: logging.NewHTTPServerMiddleware(logger), traceMiddleware: tracinghttp.NewMiddleware(tracer)}
+	return &middleware{
+		reg:             reg,
+		buckets:         buckets,
+		logMiddleware:   logging.NewHTTPServerMiddleware(logger),
+		traceMiddleware: tracinghttp.NewMiddleware(tracer),
+	}
 }
 
 // WrapHandler wraps the given HTTP handler for instrumentation:
@@ -112,17 +116,14 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 
 					observer := requestDuration.WithLabelValues(strings.ToLower(r.Method), wd.Status())
 
-					// SpanContext!
-					if spanCtx := trace.SpanContextFromContext(r.Context()); spanCtx.HasTraceID() && spanCtx.IsSampled() {
-						traceID := prometheus.Labels{"traceID": spanCtx.TraceID().String()}
-
+					if spanCtx := tracing.GetSpan(r.Context()); spanCtx.Context().IsSampled() {
+						traceID := prometheus.Labels{"traceID": spanCtx.Context().TraceID()}
 						observer.(prometheus.ExemplarObserver).ObserveWithExemplar(time.Since(now).Seconds(), traceID)
 						return
 					}
 
 					observer.Observe(time.Since(now).Seconds())
 					return
-
 				}),
 			),
 		),

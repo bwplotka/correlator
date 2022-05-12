@@ -29,6 +29,6 @@ func TestCorrelatorWithObservability(t *testing.T) {
 	//testutil.Ok(t, err)
 	//t.Cleanup(envClient.Close)
 
-	testutil.Ok(t, e2einteractive.OpenInBrowser(o.GrafanaUI()))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
