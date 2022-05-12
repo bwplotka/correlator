@@ -85,7 +85,7 @@ datasources:
   - name: Metrics
     uid: thanos
     url: %s
-    type: thanos
+    type: prometheus
     jsonData:
       httpMethod: POST
       exemplarTraceIdDestinations:
