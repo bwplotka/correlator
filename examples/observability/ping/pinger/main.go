@@ -68,7 +68,7 @@ func runMain() (err error) {
 		defer errcapture.Do(&err, f.Close, "close log file")
 		w = f
 	}
-	logger := logging.NewLogger(*logLevel, *logFormat, "ping", w)
+	logger := logging.NewLogger(*logLevel, *logFormat, "pinger", w)
 
 	var exporter tracing.ExporterBuilder
 	switch *traceEndpoint {
@@ -88,7 +88,7 @@ func runMain() (err error) {
 	}
 	defer errcapture.Do(&err, closeFn, "close tracers")
 
-	level.Info(logger).Log("msg", "metrics, logs and tracing enabled", "traceEndpoint", *traceEndpoint)
+	level.Info(logger).Log("msg", "metrics, logs and tracing enabled", "logFile", *logFile, "traceEndpoint", *traceEndpoint)
 
 	m := http.NewServeMux()
 	m.Handle("/metrics", httpinstrumentation.NewMiddleware(reg, nil, logger, tracer).

@@ -15,6 +15,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const clientClusterName = "eu1-valencia-laptop"
+
 // TestCorrelatorWithObservability is demo-ing the correlation example in the interactive test using standard go test with https://github.com/efficientgo/e2e framework.
 // Scenario flow:
 // * Starting Observatorium (like) Saas centric setup with: Thanos (IngesterReceive and Querier), Loki (all-in binary), Tempo (all-in in-mem) and Parca (TBD) with stateless Grafana.
@@ -22,26 +24,27 @@ import (
 // * Starting ping AND pinger app that are running in client environment, remote writing data to Observatorium setup. We will use that as observed workload.
 //
 // Now with this we will run "correlator" service in Observatorium that will hook into Grafana links and present a simple JSON result that allows navigating to different views and UIs.
+// NOTE(bwplotka): Prerequsite is to run make docker from root of this repo.
 func TestCorrelatorWithObservability(t *testing.T) {
 	envObs, err := e2e.NewDockerEnvironment("e2e_correlator_observatorium")
 	testutil.Ok(t, err)
 	t.Cleanup(envObs.Close)
 
-	// NOTE: You need thanos:latest image for this to work (run `make docker` on Thanos repo).
 	o, err := startObservatorium(envObs)
 	testutil.Ok(t, err)
 
 	{
 		// Create remote docker environment to simulate remote setup that sends observability data to Observatorium.
 		// TODO(bwplotka): Can container talk to another container in another network through localhost? We shall see..
-		envClient, err := e2e.NewDockerEnvironment("e2e_correlator_client")
+		envClient, err := e2e.NewDockerEnvironment(clientClusterName)
 		testutil.Ok(t, err)
 		t.Cleanup(envClient.Close)
 
-		agentFuture := NewGrafanaAgentFuture(envClient, "eu-valencia1")
+		agentFuture := NewGrafanaAgentFuture(envClient, clientClusterName)
 
-		ping := NewObservablePingService(envClient, agentFuture.InternalEndpoint("grpc"))
-		pinger := NewObservablePingerService(envClient, ping, agentFuture.InternalEndpoint("grpc"))
+		// Logs won't be visible to in test output - they are not directed to the file.
+		ping := NewObservablePingService(envClient, clientClusterName, agentFuture.InternalEndpoint("grpc"))
+		pinger := NewObservablePingerService(envClient, clientClusterName, ping, agentFuture.InternalEndpoint("grpc"))
 
 		agent := NewGrafanaAgent(agentFuture, o, ping, pinger)
 		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent))
@@ -71,8 +74,8 @@ func (o *obsService) MetricPortName() string {
 	return o.metricPortName
 }
 
-func NewObservablePingService(env e2e.Environment, traceEndpoint string) ObservableService {
-	f := e2e.NewInstrumentedRunnable(env, "ping").WithPorts(map[string]int{
+func NewObservablePingService(env e2e.Environment, name, traceEndpoint string) ObservableService {
+	f := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("ping-%s", name)).WithPorts(map[string]int{
 		"http": 8080,
 	}, "http").Future()
 
@@ -98,8 +101,8 @@ func NewObservablePingService(env e2e.Environment, traceEndpoint string) Observa
 	return o
 }
 
-func NewObservablePingerService(env e2e.Environment, ping e2e.Runnable, traceEndpoint string) ObservableService {
-	f := e2e.NewInstrumentedRunnable(env, "pinger").WithPorts(map[string]int{
+func NewObservablePingerService(env e2e.Environment, name string, ping e2e.Runnable, traceEndpoint string) ObservableService {
+	f := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("pinger-%s", name)).WithPorts(map[string]int{
 		"http": 8080,
 	}, "http").Future()
 
@@ -112,7 +115,7 @@ func NewObservablePingerService(env e2e.Environment, ping e2e.Runnable, traceEnd
 		Image: "ping:latest",
 		User:  strconv.Itoa(os.Getuid()),
 		Command: e2e.NewCommandWithoutEntrypoint("/bin/pinger",
-			"-endpoint=", ping.InternalEndpoint("http"),
+			"-endpoint=http://"+ping.InternalEndpoint("http")+"/ping",
 			"-pings-per-second=10",
 			"-trace-endpoint="+traceEndpoint,
 			"-log-file="+o.LogFile(),
@@ -166,9 +169,10 @@ server:
 metrics:
   global:
     scrape_interval: 15s
+    external_labels:
+      cluster: eu1-valencia-laptop
     remote_write:
     - url: %s
-      insecure: true
   configs:
   - name: default
     scrape_configs:
@@ -179,7 +183,6 @@ logs:
   - name: default
     clients:
       - url: %s
-        insecure: true
     positions:
       filename: /tmp/positions.yaml
     scrape_configs:
@@ -193,22 +196,10 @@ traces:
         insecure: true
         protocol: http
         format: jaeger
-        insecure: true
     receivers:
       otlp:
-	    protocols:
-	      grpc:
-
-integrations:
-  metrics:
-    autoscrape:
-      enable: true
-      metrics_instance: default
-
-  # agent
-  agent:
-    extra_labels:
-      cluster: "eu-valencia1"
+        protocols:
+        grpc:
 `,
 		obs.MetricsWriteEndpoint(),
 		strings.Join(metricScrapeJobs, "\n"),
