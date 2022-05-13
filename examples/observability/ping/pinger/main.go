@@ -35,9 +35,9 @@ var (
 	pingsPerSec        = flag.Int("pings-per-second", 10, "How many pings per second we should request")
 	traceEndpoint      = flag.String("trace-endpoint", "stdout", "The gRPC OTLP endpoint for tracing backend. Hack: Set it to 'stdout' to print traces to the output instead")
 	traceSamplingRatio = flag.Float64("trace-sampling-ratio", 1.0, "Sampling ratio. Currently 1.0 is best value if you wish to use exemplars.")
-	logLevel           = flag.String("log.level", "info", "Log filtering level. Possible values: \"error\", \"warn\", \"info\", \"debug\"")
-	logFormat          = flag.String("log.format", logging.LogFormatLogfmt, fmt.Sprintf("Log format to use. Possible options: %s or %s", logging.LogFormatLogfmt, logging.LogFormatJSON))
-	logFile            = flag.String("log.file", "", "File for logs.")
+	logLevel           = flag.String("log-level", "info", "Log filtering level. Possible values: \"error\", \"warn\", \"info\", \"debug\"")
+	logFormat          = flag.String("log-format", logging.LogFormatLogfmt, fmt.Sprintf("Log format to use. Possible options: %s or %s", logging.LogFormatLogfmt, logging.LogFormatJSON))
+	logFile            = flag.String("log-file", "", "File for logs.")
 )
 
 func main() {

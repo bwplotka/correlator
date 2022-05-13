@@ -51,6 +51,12 @@ docs: $(MDOX) ## Generates config snippets and doc formatting.
 	@echo ">> generating docs $(PATH)"
 	@$(MDOX) fmt *.md
 
+.PHONY: docker
+docker: ## Build code and docker images for correlator:latest and ping:latest
+	@echo ">> building docker images $(PATH)"
+	#@docker build . -t correlator:latest
+	@cd examples/observability/ping && docker build . -t ping:latest
+
 .PHONY: format
 format: ## Formats Go code.
 format: $(GOIMPORTS)

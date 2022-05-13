@@ -31,30 +31,108 @@ func TestCorrelatorWithObservability(t *testing.T) {
 	o, err := startObservatorium(envObs)
 	testutil.Ok(t, err)
 
-	// Create remote docker environment to simulate remote setup!
-	// TODO(bwplotka): Can container talk to another container in another network through localhost? We shall see..
-	envClient, err := e2e.NewDockerEnvironment("e2e_correlator_client")
-	testutil.Ok(t, err)
-	t.Cleanup(envClient.Close)
+	{
+		// Create remote docker environment to simulate remote setup that sends observability data to Observatorium.
+		// TODO(bwplotka): Can container talk to another container in another network through localhost? We shall see..
+		envClient, err := e2e.NewDockerEnvironment("e2e_correlator_client")
+		testutil.Ok(t, err)
+		t.Cleanup(envClient.Close)
 
-	ping := e2e.NewInstrumentedRunnable(envClient, "ping").
-		WithPorts(map[string]int{
-			"http": 8080,
-		}, "http").Init(e2e.StartOptions{
-		Image: "ping:latest",
-		User:  strconv.Itoa(os.Getuid()),
-		//Command:   e2e.NewCommandWithoutEntrypoint("agent", append([]string{"-config.enable-read-api"}, args...)...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/ready", 200, 200),
-	})
+		agentFuture := NewGrafanaAgentFuture(envClient, "eu-valencia1")
 
-	NewGrafanaAgent(envClient, "eu-valencia1", o, )
+		ping := NewObservablePingService(envClient, agentFuture.InternalEndpoint("grpc"))
+		pinger := NewObservablePingerService(envClient, ping, agentFuture.InternalEndpoint("grpc"))
+
+		agent := NewGrafanaAgent(agentFuture, o, ping, pinger)
+		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent))
+	}
+
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 
-func NewGrafanaAgent(env e2e.Environment, name string, obs *Observatorium, observables ...e2e.InstrumentedRunnable) e2e.InstrumentedRunnable {
-	f := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("grafana-agent-%v", name)).WithPorts(map[string]int{"http": 3100}, "http").Future()
+type ObservableService interface {
+	e2e.InstrumentedRunnable
+	LogFile() string
+	MetricPortName() string
+}
 
+type obsService struct {
+	e2e.InstrumentedRunnable
+	logFile        string
+	metricPortName string
+}
+
+func (o *obsService) LogFile() string {
+	return o.logFile
+}
+
+func (o *obsService) MetricPortName() string {
+	return o.metricPortName
+}
+
+func NewObservablePingService(env e2e.Environment, traceEndpoint string) ObservableService {
+	f := e2e.NewInstrumentedRunnable(env, "ping").WithPorts(map[string]int{
+		"http": 8080,
+	}, "http").Future()
+
+	o := &obsService{
+		logFile:        filepath.Join(f.InternalDir(), "out.log"),
+		metricPortName: "http",
+	}
+
+	o.InstrumentedRunnable = f.Init(e2e.StartOptions{
+		Image: "ping:latest",
+		User:  strconv.Itoa(os.Getuid()),
+		Command: e2e.NewCommandWithoutEntrypoint("/bin/ping",
+			"-set-version=v0.0.7",
+			"-latency=90%500ms,10%200ms",
+			"-success-prob=65",
+			"-trace-endpoint="+traceEndpoint,
+			"-log-file="+o.LogFile(),
+			"-log-level=debug",
+			"-log-format=json",
+		),
+		Readiness: e2e.NewHTTPReadinessProbe("http", "/metrics", 200, 200),
+	})
+	return o
+}
+
+func NewObservablePingerService(env e2e.Environment, ping e2e.Runnable, traceEndpoint string) ObservableService {
+	f := e2e.NewInstrumentedRunnable(env, "pinger").WithPorts(map[string]int{
+		"http": 8080,
+	}, "http").Future()
+
+	o := &obsService{
+		logFile:        filepath.Join(f.InternalDir(), "out.log"),
+		metricPortName: "http",
+	}
+
+	o.InstrumentedRunnable = f.Init(e2e.StartOptions{
+		Image: "ping:latest",
+		User:  strconv.Itoa(os.Getuid()),
+		Command: e2e.NewCommandWithoutEntrypoint("/bin/pinger",
+			"-endpoint=", ping.InternalEndpoint("http"),
+			"-pings-per-second=10",
+			"-trace-endpoint="+traceEndpoint,
+			"-log-file="+o.LogFile(),
+			"-log-level=debug",
+			"-log-format=json",
+		),
+		Readiness: e2e.NewHTTPReadinessProbe("http", "/metrics", 200, 200),
+	})
+	return o
+}
+
+func NewGrafanaAgentFuture(env e2e.Environment, name string) e2e.FutureInstrumentedRunnable {
+	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("grafana-agent-%v", name)).
+		WithPorts(map[string]int{
+			"http": 12345,
+			"grpc": 12346,
+		}, "http").Future()
+
+}
+func NewGrafanaAgent(f e2e.FutureInstrumentedRunnable, obs *Observatorium, observables ...ObservableService) e2e.InstrumentedRunnable {
 	var metricScrapeJobs []string
 	var logsScrapeJob []string
 
@@ -64,7 +142,7 @@ func NewGrafanaAgent(env e2e.Environment, name string, obs *Observatorium, obser
       static_configs:
       - targets: ['%s']`,
 			observable.Name(),
-			observable.InternalEndpoint("http"), // Hack, find typed way to find correct metric endpoint.
+			observable.InternalEndpoint(observable.MetricPortName()),
 		))
 
 		logsScrapeJob = append(logsScrapeJob, fmt.Sprintf(`
@@ -76,7 +154,7 @@ func NewGrafanaAgent(env e2e.Environment, name string, obs *Observatorium, obser
           __path__: %s`,
 			observable.Name(),
 			observable.Name(),
-			filepath.Join(observable.InternalDir(), "out.log"), // Another hack.
+			observable.LogFile(),
 		))
 	}
 
@@ -140,11 +218,13 @@ integrations:
 	)
 
 	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "agent.yaml"), []byte(config), os.ModePerm); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create agent config failed"))
+		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrap(err, "create agent config failed"))
 	}
 
 	args := e2e.BuildArgs(map[string]string{
-		"-config.file": filepath.Join(f.InternalDir(), "agent.yaml"),
+		"-config.file":         filepath.Join(f.InternalDir(), "agent.yaml"),
+		"-server.http.address": "0.0.0.0:12345",
+		"-server.grpc.address": "0.0.0.0:12346",
 	})
 
 	return f.Init(
