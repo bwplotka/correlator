@@ -48,10 +48,15 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 
 	// Start Thanos for metrics.
 	// Simplified stack - no compaction, no object storage, just filesystem and inmem WAL.
-	o.receive = e2ethanos.NewReceiveBuilder(env, backendName).WithExemplarsInMemStorage(1e6).Init()
+
+	o.receive = e2ethanos.NewReceiveBuilder(env, backendName).
+		WithExemplarsInMemStorage(1e6).
+		WithImage("quay.io/thanos/thanos:v0.26.0").
+		Init()
 	o.querier = e2ethanos.NewQuerierBuilder(env, backendName).
 		WithStoreAddresses(o.receive.InternalEndpoint("grpc")).
 		WithExemplarAddresses(o.receive.InternalEndpoint("grpc")).
+		WithImage("quay.io/thanos/thanos:v0.26.0").
 		Init()
 
 	// Loki + Grafana as Loki does not have it's own UI.

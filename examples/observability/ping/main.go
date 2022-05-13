@@ -147,7 +147,7 @@ func runMain() (err error) {
 
 	w := os.Stderr
 	if *logFile != "" {
-		f, err := os.Open(*logFile)
+		f, err := os.OpenFile(*logFile, os.O_CREATE|os.O_RDWR|os.O_APPEND, os.ModePerm)
 		if err != nil {
 			return err
 		}

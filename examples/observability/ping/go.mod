@@ -3,7 +3,7 @@ module github.com/bwplotka/correlator/examples/observability/ping
 go 1.17
 
 require (
-	github.com/bwplotka/tracing-go v0.0.0-20220503165347-ff06a00b8232
+	github.com/bwplotka/tracing-go v0.0.0-20220512192909-58352846de34
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
 	github.com/go-kit/log v0.2.0
 	github.com/oklog/run v1.1.0
@@ -45,5 +45,3 @@ require (
 	google.golang.org/grpc v1.45.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 )
-
-replace github.com/bwplotka/tracing-go => ../../../../tracing-go
