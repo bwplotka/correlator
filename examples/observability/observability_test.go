@@ -131,7 +131,7 @@ func NewGrafanaAgentFuture(env e2e.Environment, name string) e2e.FutureInstrumen
 	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("grafana-agent-%v", name)).
 		WithPorts(map[string]int{
 			"http": 12345,
-			"grpc": 12346,
+			"grpc": 4317,
 		}, "http").Future()
 
 }
@@ -199,7 +199,9 @@ traces:
     receivers:
       otlp:
         protocols:
-        grpc:
+          grpc: # 18:16:07 grafana-agent-eu1-valencia-laptop: ts=2022-05-13T16:16:07.835523133Z caller=main.go:57 level=error msg="error creating the agent server entrypoint" err="failed to create tracing instance default: failed to create pipeline: failed to load otelConfig from agent traces config: unknown protocol, expected 'grpc'"
+            endpoint: "0.0.0.0:4317" 
+          http:
 `,
 		obs.MetricsWriteEndpoint(),
 		strings.Join(metricScrapeJobs, "\n"),
