@@ -26,7 +26,7 @@ const clientClusterName = "eu1-valencia"
 // Now with this we will run "correlator" service in Observatorium that will hook into Grafana links and present a simple JSON result that allows navigating to different views and UIs.
 // NOTE(bwplotka): Prerequsite is to run make docker from root of this repo.
 func TestCorrelatorWithObservability(t *testing.T) {
-	env, err := e2e.NewDockerEnvironment(backendName)
+	env, err := e2e.NewDockerEnvironment("e2e-correlation")
 	testutil.Ok(t, err)
 	t.Cleanup(env.Close)
 
@@ -113,7 +113,7 @@ func NewObservablePingerService(env e2e.Environment, name string, ping e2e.Runna
 		User:  strconv.Itoa(os.Getuid()),
 		Command: e2e.NewCommandWithoutEntrypoint("/bin/pinger",
 			"-endpoint=http://"+ping.InternalEndpoint("http")+"/ping",
-			"-pings-per-second=10",
+			"-pings-per-second=1",
 			"-trace-endpoint="+traceEndpoint,
 			"-log-file="+o.LogFile(),
 			"-log-level=debug",

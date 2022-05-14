@@ -195,13 +195,12 @@ func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
 	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
 		WithPorts(
 			map[string]int{
-				"http.front":                16000,
+				"http.front":                16686,
 				"http.admin":                14269,
 				"jaeger.thrift-model.proto": 14250, //	 gRPC	used by jaeger-agent to send spans in model.proto format
 			}, "http.admin").
 		Init(e2e.StartOptions{
 			Image:     "jaegertracing/all-in-one:1.33",
-			Command:   e2e.NewCommand("--collector.http-server.host-port=:16000"),
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
 }

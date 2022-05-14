@@ -3,6 +3,7 @@ module github.com/bwplotka/correlator
 go 1.17
 
 require (
+	github.com/ghodss/yaml v1.0.0
 	github.com/oklog/run v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.1
@@ -18,4 +19,5 @@ require (
 	github.com/prometheus/procfs v0.7.3 // indirect
 	golang.org/x/sys v0.0.0-20220317061510-51cd9980dadf // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
