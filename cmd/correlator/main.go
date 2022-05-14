@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"html/template"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -22,6 +23,20 @@ import (
 )
 
 const correlatorVersion = "v0.1.0"
+
+const html = `
+<html>
+    <head>
+    <title>Correlator</title>
+    </head>
+    <body>
+        <form action="/correlate" method="post">
+            URL: <input type="url" name="url">
+            <input type="submit" value="Correlate", >
+        </form>
+    </body>
+</html>
+`
 
 var (
 	addr       = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
@@ -87,20 +102,38 @@ func runMain() (err error) {
 		},
 	))
 
+	t, err := template.New("login.gtpl").Parse(html)
+	if err != nil {
+		return err
+	}
+
+	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if err := t.Execute(w, nil); err != nil {
+			httpErrHandle(w, 500, err)
+		}
+	})
+
 	m.HandleFunc("/correlate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
 
-		urlParam := r.URL.Query().Get("url")
-		if urlParam == "" {
-			httpErrHandle(w, http.StatusBadRequest, errors.New("url paramater is required."))
+		if err := r.ParseForm(); err != nil {
+			httpErrHandle(w, http.StatusInternalServerError, err)
 		}
-		correlations, err := c.CorrelateFromURL(r.Context(), "")
+
+		urlParam := r.Form["url"]
+		if urlParam[0] == "" {
+			httpErrHandle(w, http.StatusBadRequest, errors.New("url paramater is required."))
+			return
+		}
+		correlations, err := c.CorrelateFromURL(r.Context(), urlParam[0])
 		if err != nil {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 			return
 		}
 
-		b, err := json.Marshal(correlations)
+		b, err := json.Marshal(struct {
+			Correlations []correlator.Correlation
+		}{Correlations: correlations})
 		if err != nil {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 			return
