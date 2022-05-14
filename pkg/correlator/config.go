@@ -7,18 +7,30 @@ import (
 )
 
 type Config struct {
-	// Sources of Data
-	Sources struct {
-		Thanos struct {
-			Source
-		}
-		Loki struct {
-			Source
-		}
-		Jaeger struct {
-			Source
-		}
-	}
+	Sources Sources
+}
+
+type Sources struct {
+	Thanos ThanosSource
+	Loki   LokiSource
+	Jaeger JaegerSource
+	Parca  ParcaSource
+}
+
+type ThanosSource struct {
+	Source
+}
+
+type LokiSource struct {
+	Source
+}
+
+type JaegerSource struct {
+	Source
+}
+
+type ParcaSource struct {
+	Source
 }
 
 type Source struct {

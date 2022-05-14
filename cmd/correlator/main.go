@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	stdlog "log"
 	"net/http"
@@ -34,6 +35,11 @@ func main() {
 		// Use %+v for github.com/pkg/errors error to print with stack.
 		stdlog.Fatalf("Error: %+v", errors.Wrapf(err, "%s", flag.Arg(0)))
 	}
+}
+
+func httpErrHandle(w http.ResponseWriter, code int, err error) {
+	w.WriteHeader(code)
+	_, _ = w.Write([]byte("{ \"error\": \" " + err.Error() + "\"}"))
 }
 
 func runMain() (err error) {
@@ -81,8 +87,27 @@ func runMain() (err error) {
 		},
 	))
 
-	m.HandleFunc("/correlate", func(writer http.ResponseWriter, request *http.Request) {
+	m.HandleFunc("/correlate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json; charset=utf-8")
 
+		urlParam := r.URL.Query().Get("url")
+		if urlParam == "" {
+			httpErrHandle(w, http.StatusBadRequest, errors.New("url paramater is required."))
+		}
+		correlations, err := c.CorrelateFromURL(r.Context(), "")
+		if err != nil {
+			httpErrHandle(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		b, err := json.Marshal(correlations)
+		if err != nil {
+			httpErrHandle(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		w.WriteHeader(200)
+		_, _ = w.Write(b)
 	})
 
 	srv := http.Server{Addr: *addr, Handler: m}

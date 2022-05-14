@@ -3,6 +3,7 @@ module github.com/bwplotka/correlator/examples/observability
 go 1.17
 
 require (
+	github.com/bwplotka/correlator v0.0.0-20220514085040-58f353bc03b3
 	github.com/efficientgo/e2e v0.12.1
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
 	github.com/pkg/errors v0.9.1
@@ -59,6 +60,7 @@ require (
 	github.com/felixge/fgprof v0.9.1 // indirect
 	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
+	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-kit/log v0.2.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
@@ -153,7 +155,7 @@ require (
 	golang.org/x/net v0.0.0-20220114011407-0dd24b26b47d // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
+	golang.org/x/sys v0.0.0-20220317061510-51cd9980dadf // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
 	golang.org/x/tools v0.1.9-0.20211209172050-90a85b2969be // indirect
@@ -176,6 +178,8 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
+
+	github.com/bwplotka/correlator => ../../
 
 	github.com/cortexproject/cortex v1.10.1-0.20211124141505-4e9fc3a2b5ab => github.com/akanshat/cortex v1.10.1-0.20211222182735-328fbeedd424
 	github.com/efficientgo/tools/core => github.com/efficientgo/tools/core v0.0.0-20210731122119-5d4a0645ce9a

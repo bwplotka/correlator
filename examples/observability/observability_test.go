@@ -47,7 +47,7 @@ func TestCorrelatorWithObservability(t *testing.T) {
 
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
-	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http.front")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 

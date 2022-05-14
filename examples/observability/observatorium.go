@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/bwplotka/correlator/pkg/correlator"
 	"github.com/efficientgo/e2e"
+	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -68,7 +70,43 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 	// Profiles.
 	// TODO
 
-	return o, e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger)
+	if err := e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger); err != nil {
+		return nil, err
+	}
+
+	// Correlator.
+	// TODO(bwplotka): For test purposes, just create config.
+	c := correlator.Config{
+		Sources: correlator.Sources{
+			Thanos: correlator.ThanosSource{
+				Source: correlator.Source{
+					InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
+					ExternalEndpoint: o.querier.Endpoint("http"),
+				},
+			},
+			Loki: correlator.LokiSource{
+				Source: correlator.Source{
+					InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
+					ExternalEndpoint: o.loki.Endpoint("http"),
+				},
+			},
+			Jaeger: correlator.JaegerSource{
+				Source: correlator.Source{
+					InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
+					ExternalEndpoint: o.jaeger.Endpoint("http"),
+				},
+			},
+		},
+	}
+	b, err := yaml.Marshal(&c)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join("/home/bwplotka/Repos/correlator/config.yaml"), b, os.ModePerm); err != nil {
+		return nil, err
+	}
+
+	return o, nil
 }
 
 // NewLokiGrafana was blamelessly copied (and adjusted) from Ian's demo, thanks to the fact we all use e2e framework.
@@ -195,7 +233,7 @@ func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
 	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
 		WithPorts(
 			map[string]int{
-				"http.front":                16686,
+				"http":                      16686,
 				"http.admin":                14269,
 				"jaeger.thrift-model.proto": 14250, //	 gRPC	used by jaeger-agent to send spans in model.proto format
 			}, "http.admin").

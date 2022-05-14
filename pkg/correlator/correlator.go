@@ -2,6 +2,7 @@ package correlator
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 )
 
@@ -16,13 +17,13 @@ func New(cfg Config) (*Correlator, error) {
 }
 
 type Correlation struct {
-	Error       error `json:"omitempty"`
+	Error       error `json:";omitempty"`
 	Description string
 	URL         url.URL
 }
 
 // TODO(bwplotka): Make it a streaming response.
 func (c *Correlator) CorrelateFromURL(ctx context.Context, url string) ([]Correlation, error) {
-
+	fmt.Println(url)
 	return nil, nil
 }
