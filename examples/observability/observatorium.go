@@ -154,6 +154,7 @@ limits_config:
   enforce_metric_name: false
   reject_old_samples: true
   reject_old_samples_max_age: 168h
+  ingestion_rate_mb: 40 # We surpassed 4MB just with 2 app logging on one laptop?
 chunk_store_config:
   max_look_back_period: 0
 table_manager:
