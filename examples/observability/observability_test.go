@@ -19,38 +19,35 @@ const clientClusterName = "eu1-valencia-laptop"
 
 // TestCorrelatorWithObservability is demo-ing the correlation example in the interactive test using standard go test with https://github.com/efficientgo/e2e framework.
 // Scenario flow:
-// * Starting Observatorium (like) Saas centric setup with: Thanos (IngesterReceive and Querier), Loki (all-in binary), Tempo (all-in in-mem) and Parca (TBD) with stateless Grafana.
+// * Starting Observatorium (like) Saas centric setup with: Thanos (IngesterReceive and Querier), Loki (all-in binary) + Grafana, Jaeger (all-in in-mem) and Parca (TBD).
 // * Starting remote (like) observability client setup with Grafana Agent and Parca Agent (TBH).
 // * Starting ping AND pinger app that are running in client environment, remote writing data to Observatorium setup. We will use that as observed workload.
 //
 // Now with this we will run "correlator" service in Observatorium that will hook into Grafana links and present a simple JSON result that allows navigating to different views and UIs.
 // NOTE(bwplotka): Prerequsite is to run make docker from root of this repo.
 func TestCorrelatorWithObservability(t *testing.T) {
-	envObs, err := e2e.NewDockerEnvironment(backendName)
+	env, err := e2e.NewDockerEnvironment(backendName)
 	testutil.Ok(t, err)
-	t.Cleanup(envObs.Close)
+	t.Cleanup(env.Close)
 
-	o, err := startObservatorium(envObs)
+	o, err := startObservatorium(env)
 	testutil.Ok(t, err)
 
 	{
-		// Create remote docker environment to simulate remote setup that sends observability data to Observatorium.
-		// TODO(bwplotka): Can container talk to another container in another network through localhost? We shall see..
-		envClient, err := e2e.NewDockerEnvironment(clientClusterName)
-		testutil.Ok(t, err)
-		t.Cleanup(envClient.Close)
-
-		agentFuture := NewGrafanaAgentFuture(envClient, clientClusterName)
+		// Client setup.
+		agentFuture := NewGrafanaAgentFuture(env, clientClusterName)
 
 		// Logs won't be visible to in test output - they are not directed to the file.
-		ping := NewObservablePingService(envClient, clientClusterName, agentFuture.InternalEndpoint("grpc"))
-		pinger := NewObservablePingerService(envClient, clientClusterName, ping, agentFuture.InternalEndpoint("grpc"))
+		ping := NewObservablePingService(env, clientClusterName, agentFuture.InternalEndpoint("grpc"))
+		pinger := NewObservablePingerService(env, clientClusterName, ping, agentFuture.InternalEndpoint("grpc"))
 
 		agent := NewGrafanaAgent(agentFuture, o, ping, pinger)
 		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent))
 	}
 
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 

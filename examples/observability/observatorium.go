@@ -23,19 +23,19 @@ type Observatorium struct {
 	grafana e2e.Runnable
 }
 
-// NOTE(bwplotka): All endpoints are external, so they can be reachable from different docker network (yolo).
+// NOTE(bwplotka): All endpoints are internal, so they cannot be reachable from host (only from docker network).
 
 func (o *Observatorium) MetricsWriteEndpoint() string {
-	return e2ethanos.RemoteWriteEndpoint(o.receive.Endpoint("remote-write"))
+	return e2ethanos.RemoteWriteEndpoint(o.receive.InternalEndpoint("remote-write"))
 }
 
 func (o *Observatorium) LogsWriteEndpoint() string {
-	return "http://" + o.loki.Endpoint("http") + "/loki/api/v1/push"
+	return "http://" + o.loki.InternalEndpoint("http") + "/loki/api/v1/push"
 }
 
 func (o *Observatorium) TracesWriteEndpoint() string {
 	// TODO(bwplotka): Ideally it's OTLP, but Jaeger does not implement it yet (https://github.com/jaegertracing/jaeger/issues/3625).
-	return o.jaeger.Endpoint("jaeger.thrift-model.proto")
+	return o.jaeger.InternalEndpoint("jaeger.thrift-model.proto")
 }
 
 func (o *Observatorium) ProfilesWriteEndpoint() string {
