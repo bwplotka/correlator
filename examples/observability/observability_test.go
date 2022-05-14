@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const clientClusterName = "eu1-valencia-laptop"
+const clientClusterName = "eu1-valencia"
 
 // TestCorrelatorWithObservability is demo-ing the correlation example in the interactive test using standard go test with https://github.com/efficientgo/e2e framework.
 // Scenario flow:
@@ -47,7 +47,7 @@ func TestCorrelatorWithObservability(t *testing.T) {
 
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
-	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http.front")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 
@@ -132,6 +132,7 @@ func NewGrafanaAgentFuture(env e2e.Environment, name string) e2e.FutureInstrumen
 		}, "http").Future()
 
 }
+
 func NewGrafanaAgent(f e2e.FutureInstrumentedRunnable, obs *Observatorium, observables ...ObservableService) e2e.InstrumentedRunnable {
 	var metricScrapeJobs []string
 	var logsScrapeJob []string
@@ -219,10 +220,9 @@ traces:
 
 	return f.Init(
 		e2e.StartOptions{
-			Image:     "grafana/agent:v0.24.2",
-			User:      strconv.Itoa(os.Getuid()),
-			Command:   e2e.NewCommandWithoutEntrypoint("agent", append([]string{"-config.enable-read-api"}, args...)...),
-			Readiness: e2e.NewHTTPReadinessProbe("http", "/ready", 200, 200),
+			Image:   "grafana/agent:v0.24.2",
+			Command: e2e.NewCommandWithoutEntrypoint("agent", append([]string{"-config.enable-read-api"}, args...)...),
+			//Readiness: e2e.NewHTTPReadinessProbe("http", "/", 200, 200),
 		},
 	)
 }

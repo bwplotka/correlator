@@ -195,7 +195,7 @@ func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
 	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
 		WithPorts(
 			map[string]int{
-				"http.front":                14269,
+				"http.front":                16000,
 				"http.admin":                14269,
 				"jaeger.thrift-model.proto": 14250, //	 gRPC	used by jaeger-agent to send spans in model.proto format
 			}, "http.admin").
