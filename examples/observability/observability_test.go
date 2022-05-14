@@ -26,7 +26,7 @@ const clientClusterName = "eu1-valencia-laptop"
 // Now with this we will run "correlator" service in Observatorium that will hook into Grafana links and present a simple JSON result that allows navigating to different views and UIs.
 // NOTE(bwplotka): Prerequsite is to run make docker from root of this repo.
 func TestCorrelatorWithObservability(t *testing.T) {
-	envObs, err := e2e.NewDockerEnvironment("e2e_correlator_observatorium")
+	envObs, err := e2e.NewDockerEnvironment(backendName)
 	testutil.Ok(t, err)
 	t.Cleanup(envObs.Close)
 
@@ -194,12 +194,12 @@ traces:
     remote_write:
       - endpoint: %s
         insecure: true
-        protocol: http
+        protocol: grpc # Agent does not support HTTP Jaeger format......
         format: jaeger
     receivers:
       otlp:
         protocols:
-          grpc: # 18:16:07 grafana-agent-eu1-valencia-laptop: ts=2022-05-13T16:16:07.835523133Z caller=main.go:57 level=error msg="error creating the agent server entrypoint" err="failed to create tracing instance default: failed to create pipeline: failed to load otelConfig from agent traces config: unknown protocol, expected 'grpc'"
+          grpc:
             endpoint: "0.0.0.0:4317" 
           http:
 `,

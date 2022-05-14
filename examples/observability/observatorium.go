@@ -34,8 +34,8 @@ func (o *Observatorium) LogsWriteEndpoint() string {
 }
 
 func (o *Observatorium) TracesWriteEndpoint() string {
-	// TODO(bwplotka): Ideally it's thrift.
-	return "http://" + o.jaeger.Endpoint("jaeger.thrift") + "/api/traces"
+	// TODO(bwplotka): Ideally it's OTLP, but Jaeger does not implement it yet (https://github.com/jaegertracing/jaeger/issues/3625).
+	return o.jaeger.Endpoint("jaeger.thrift-model.proto")
 }
 
 func (o *Observatorium) ProfilesWriteEndpoint() string {
@@ -48,7 +48,6 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 
 	// Start Thanos for metrics.
 	// Simplified stack - no compaction, no object storage, just filesystem and inmem WAL.
-
 	o.receive = e2ethanos.NewReceiveBuilder(env, backendName).
 		WithExemplarsInMemStorage(1e6).
 		WithImage("quay.io/thanos/thanos:v0.26.0").
@@ -195,12 +194,13 @@ func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
 	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
 		WithPorts(
 			map[string]int{
-				"http.front":    16686,
-				"jaeger.thrift": 16000, // OTLP is not yet implemented, sad face.
-			}, "http.front").
+				"http.front":                14269,
+				"http.admin":                14269,
+				"jaeger.thrift-model.proto": 14250, //	 gRPC	used by jaeger-agent to send spans in model.proto format
+			}, "http.admin").
 		Init(e2e.StartOptions{
-			Image:   "jaegertracing/all-in-one:1.33",
-			Command: e2e.NewCommand("--collector.http-server.host-port=:16000"),
-			// TODO(bwplotka): Readiness
+			Image:     "jaegertracing/all-in-one:1.33",
+			Command:   e2e.NewCommand("--collector.http-server.host-port=:16000"),
+			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
 }
