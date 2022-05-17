@@ -74,36 +74,39 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 		return nil, err
 	}
 
-	// Correlator.
-	// TODO(bwplotka): For test purposes, just create config.
-	c := correlator.Config{
-		Sources: correlator.Sources{
-			Thanos: correlator.ThanosSource{
-				Source: correlator.Source{
-					InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
-					ExternalEndpoint: o.querier.Endpoint("http"),
+	{
+		// Correlator, dev side!
+		// TODO(bwplotka): For test purposes, just create config.
+		c := correlator.Config{
+			Sources: correlator.Sources{
+				Thanos: correlator.ThanosSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
+						ExternalEndpoint: o.querier.Endpoint("http"),
+					},
+				},
+				Loki: correlator.LokiSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
+						ExternalEndpoint: o.loki.Endpoint("http"),
+					},
+				},
+				Jaeger: correlator.JaegerSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
+						ExternalEndpoint: o.jaeger.Endpoint("http"),
+					},
 				},
 			},
-			Loki: correlator.LokiSource{
-				Source: correlator.Source{
-					InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
-					ExternalEndpoint: o.loki.Endpoint("http"),
-				},
-			},
-			Jaeger: correlator.JaegerSource{
-				Source: correlator.Source{
-					InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
-					ExternalEndpoint: o.jaeger.Endpoint("http"),
-				},
-			},
-		},
-	}
-	b, err := yaml.Marshal(&c)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join("/home/bwplotka/Repos/correlator/config.yaml"), b, os.ModePerm); err != nil {
-		return nil, err
+		}
+		b, err := yaml.Marshal(&c)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(filepath.Join("/home/bwplotka/Repos/correlator/config.yaml"), b, os.ModePerm); err != nil {
+			return nil, err
+		}
+
 	}
 
 	return o, nil

@@ -6,6 +6,7 @@ require (
 	github.com/bwplotka/correlator v0.0.0-20220514085040-58f353bc03b3
 	github.com/efficientgo/e2e v0.12.1
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
+	github.com/ghodss/yaml v1.0.0
 	github.com/pkg/errors v0.9.1
 	github.com/thanos-io/thanos v0.26.1-0.20220513152734-b9f70568e865
 )
@@ -60,7 +61,6 @@ require (
 	github.com/felixge/fgprof v0.9.1 // indirect
 	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
-	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-kit/log v0.2.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
