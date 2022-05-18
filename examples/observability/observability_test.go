@@ -160,6 +160,7 @@ func NewGrafanaAgent(f e2e.FutureInstrumentedRunnable, obs *Observatorium, obser
 	}
 
 	// TODO(bwplotka): Can we have that tail tracing solution? (:
+	// https://grafana.com/docs/mimir/latest/operators-guide/using-exemplars/before-you-begin/ is useful!
 	config := fmt.Sprintf(`
 server:
   log_level: info
@@ -194,6 +195,7 @@ traces:
         insecure: true
         protocol: grpc # Agent does not support HTTP Jaeger format......
         format: jaeger
+        send_exemplars: true
     receivers:
       otlp:
         protocols:

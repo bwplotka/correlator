@@ -121,8 +121,8 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 					promhttp.WithExemplarFromRequestContext(getExemplarFn),
 				),
 			),
+			promhttp.WithExemplarFromRequestContext(getExemplarFn),
 		),
-		promhttp.WithExemplarFromRequestContext(getExemplarFn),
 	)
 
 	if ins.logMiddleware != nil {
