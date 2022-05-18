@@ -172,6 +172,7 @@ metrics:
       cluster: eu1-valencia-laptop
     remote_write:
     - url: %s
+      send_exemplars: true
   configs:
   - name: default
     scrape_configs:
@@ -195,7 +196,6 @@ traces:
         insecure: true
         protocol: grpc # Agent does not support HTTP Jaeger format......
         format: jaeger
-        send_exemplars: true
     receivers:
       otlp:
         protocols:
