@@ -57,7 +57,6 @@ var RequestIDCtxKey struct{}
 func (m *HTTPMiddleware) getRequestID(r *http.Request) string {
 	id, ok := r.Context().Value(RequestIDCtxKey).(string)
 	if !ok {
-		fmt.Println("NO REQUEST ID!!!")
 		return r.Header.Get("X-Request-ID")
 	}
 	return id

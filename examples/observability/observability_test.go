@@ -115,7 +115,7 @@ func NewObservablePingerService(env e2e.Environment, name string, ping e2e.Runna
 			"-endpoint=http://"+ping.InternalEndpoint("http")+"/ping",
 			"-pings-per-second=1",
 			"-trace-endpoint="+traceEndpoint,
-			//"-log-file="+o.LogFile(),
+			"-log-file="+o.LogFile(),
 			"-log-level=debug",
 			"-log-format=json",
 		),

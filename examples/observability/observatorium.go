@@ -78,21 +78,21 @@ groups:
   interval: 5s
   rules:
   - alert: PingService_TooManyErrors
-    expr: by(handler, instance) sum(rate(http_requests_total[1m])) / by(handler, instance) sum(rate(http_requests_total[1m])) > 0
+    expr: sum(rate(http_requests_total{handler="/ping",code!~"2.."}[1m])) by (job, instance) / sum(rate(http_requests_total{handler="/ping"}[1m])) by (job, instance) > 0.3
     labels:
       severity: page
     annotations:
       summary: "To many ping errors!"
 `
-	if err := os.MkdirAll(filepath.Join(ruleFuture.InternalDir(), "rules"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(ruleFuture.Dir(), "rules"), os.ModePerm); err != nil {
 		return nil, err
 	}
-	if err := ioutil.WriteFile(filepath.Join(ruleFuture.InternalDir(), "rules", "alert.yaml"), []byte(pingHTTPErrorsAlert), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(ruleFuture.Dir(), "rules", "alert.yaml"), []byte(pingHTTPErrorsAlert), 0666); err != nil {
 		return nil, err
 	}
 
 	rule := ruleFuture.InitStateless(filepath.Join(ruleFuture.InternalDir(), "rules"), []httpconfig.Config{
-		{EndpointsConfig: httpconfig.EndpointsConfig{StaticAddresses: []string{o.querier.InternalEndpoint("http")}}},
+		{EndpointsConfig: httpconfig.EndpointsConfig{StaticAddresses: []string{"http://" + o.querier.InternalEndpoint("http")}}},
 	}, []*config.RemoteWriteConfig{{URL: &commoncfg.URL{URL: u}}})
 
 	// Loki + Grafana as Loki does not have it's own UI.
