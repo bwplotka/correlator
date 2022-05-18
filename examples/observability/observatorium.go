@@ -3,6 +3,7 @@ package observability
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,9 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
+	commoncfg "github.com/prometheus/common/config"
+	"github.com/prometheus/prometheus/config"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -49,16 +53,47 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 	o := &Observatorium{}
 
 	// Start Thanos for metrics.
-	// Simplified stack - no compaction, no object storage, just filesystem and inmem WAL.
+	// Simplified stack - no compaction, no object storage, just filesystem and inmem WAL, plus ruling/alerting.
+	ruleFuture := e2ethanos.NewRulerBuilder(env, backendName).
+		WithImage("quay.io/thanos/thanos:v0.26.0")
 	o.receive = e2ethanos.NewReceiveBuilder(env, backendName).
 		WithExemplarsInMemStorage(1e6).
 		WithImage("quay.io/thanos/thanos:v0.26.0").
 		Init()
 	o.querier = e2ethanos.NewQuerierBuilder(env, backendName).
 		WithStoreAddresses(o.receive.InternalEndpoint("grpc")).
+		WithRuleAddresses(ruleFuture.InternalEndpoint("grpc")).
 		WithExemplarAddresses(o.receive.InternalEndpoint("grpc")).
 		WithImage("quay.io/thanos/thanos:v0.26.0").
 		Init()
+
+	u, err := url.Parse(e2ethanos.RemoteWriteEndpoint(o.receive.InternalEndpoint("remote-write")))
+	if err != nil {
+		return nil, err
+	}
+
+	const pingHTTPErrorsAlert = `
+groups:
+- name: ping-service-alerts
+  interval: 5s
+  rules:
+  - alert: PingService_TooManyErrors
+    expr: by(handler, instance) sum(rate(http_requests_total[1m])) / by(handler, instance) sum(rate(http_requests_total[1m])) > 0
+    labels:
+      severity: page
+    annotations:
+      summary: "To many ping errors!"
+`
+	if err := os.MkdirAll(filepath.Join(ruleFuture.InternalDir(), "rules"), os.ModePerm); err != nil {
+		return nil, err
+	}
+	if err := ioutil.WriteFile(filepath.Join(ruleFuture.InternalDir(), "rules", "alert.yaml"), []byte(pingHTTPErrorsAlert), 0666); err != nil {
+		return nil, err
+	}
+
+	rule := ruleFuture.InitStateless(filepath.Join(ruleFuture.InternalDir(), "rules"), []httpconfig.Config{
+		{EndpointsConfig: httpconfig.EndpointsConfig{StaticAddresses: []string{o.querier.InternalEndpoint("http")}}},
+	}, []*config.RemoteWriteConfig{{URL: &commoncfg.URL{URL: u}}})
 
 	// Loki + Grafana as Loki does not have it's own UI.
 	o.loki = NewLoki(env, backendName)
@@ -70,7 +105,7 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 	// Profiles.
 	// TODO
 
-	if err := e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger); err != nil {
+	if err := e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger, rule); err != nil {
 		return nil, err
 	}
 
@@ -96,6 +131,9 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 						InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
 						ExternalEndpoint: o.jaeger.Endpoint("http"),
 					},
+				},
+				Parca: correlator.ParcaSource{
+					// TBD
 				},
 			},
 		}

@@ -97,17 +97,33 @@ func (l latencyDecider) AddLatency(ctx context.Context, logger log.Logger) {
 	}
 }
 
+func nastyBugIAccidentialyPut() {
+	done := make(chan int)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+		}
+	}()
+	time.Sleep(1 * time.Second)
+	close(done)
+}
+
 func pingHandler(logger log.Logger, latDecider *latencyDecider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		latDecider.AddLatency(r.Context(), logger)
 
 		if err := tracing.DoInSpan(r.Context(), "evaluatePing", func(ctx context.Context) error {
 			tracing.GetSpan(ctx).SetAttributes("successProbability", *successProb)
-			level.Debug(logger).Log("msg", "evalutating ping", "successProbability", *successProb)
+			level.Debug(logger).Log("msg", "evaluating ping", "successProbability", *successProb)
 
 			if rand.Float64()*100 <= *successProb {
 				return nil
 			}
+			nastyBugIAccidentialyPut()
 			return errors.New("decided to NOT return success, sorry")
 		}); err != nil {
 			w.WriteHeader(http.StatusTeapot)

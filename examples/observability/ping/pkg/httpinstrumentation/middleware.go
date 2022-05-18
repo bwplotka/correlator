@@ -2,6 +2,7 @@ package httpinstrumentation
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -134,6 +135,7 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 		next := base
 		base = ins.logMiddleware.WrapHandler(handlerName, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			spanCtx := tracing.GetSpan(r.Context()).Context()
+			fmt.Println("injecting TRACEID", spanCtx.TraceID())
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), logging.RequestIDCtxKey, spanCtx.TraceID())))
 		}))
 	}

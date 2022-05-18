@@ -1,6 +1,6 @@
 package httpinstrumentation
 
-//
+// TODO: Tracing tripperware not ready, sorry!
 //import (
 //	"fmt"
 //	"net/http"

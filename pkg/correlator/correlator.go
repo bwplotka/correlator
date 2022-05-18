@@ -8,22 +8,14 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/api"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/prometheus/model/labels"
 )
 
 type Correlator struct {
-	cfg     Config
-	logger  log.Logger
-	sources []source
-}
-
-type source interface {
-	ParseRequestFromURL(u *url.URL) (request, bool, error)
-	InternalEndpoint() string
-	ExternalEndpoint() string
-}
-
-type request interface {
+	cfg    Config
+	logger log.Logger
 }
 
 type metricRequest struct {
@@ -33,21 +25,10 @@ type metricRequest struct {
 }
 
 func New(cfg Config, logger log.Logger) (*Correlator, error) {
-	var sources []source
 
-	if (cfg.Sources.Thanos != ThanosSource{}) {
-		sources = append(sources, newThanosSource(cfg.Sources.Thanos))
-	}
-	if (cfg.Sources.Loki != LokiSource{}) {
-		sources = append(sources, newLokiSource(cfg.Sources.Loki))
-	}
-	if (cfg.Sources.Jaeger != JaegerSource{}) {
-		sources = append(sources, newJaegerSource(cfg.Sources.Jaeger))
-	}
 	return &Correlator{
-		cfg:     cfg,
-		logger:  logger,
-		sources: sources,
+		cfg:    cfg,
+		logger: logger,
 	}, nil
 }
 
@@ -57,32 +38,56 @@ type Correlation struct {
 	URL         url.URL
 }
 
-// CorrelateFromURL provides correlations from the URL.
-// NOTE: ARTIFICIAL INTELLIGENCE - USE WITH CARE!
-// TODO(bwplotka): Make it a streaming response.
-func (c *Correlator) CorrelateFromURL(ctx context.Context, urlOrPath string) ([]Correlation, error) {
-	level.Debug(c.logger).Log("msg", "correlating from URL", "url", urlOrPath)
-
-	return nil, nil
+type Input struct {
+	AlertName string
 }
 
-func (c *Correlator) findSource(ctx context.Context, urlOrPath string) error {
-	u, err := url.Parse(urlOrPath)
+type Discoveries string
+
+// Correlate provides correlations from the best effort input.
+// NOTE: ARTIFICIAL INTELLIGENCE - USE WITH CARE!
+// TODO(bwplotka): Make it a streaming response.
+func (c *Correlator) Correlate(ctx context.Context, input Input) ([]Discoveries, []Correlation, error) {
+	level.Debug(c.logger).Log("msg", "correlating from Input", "input", input)
+
+	if input.AlertName == "" {
+		return nil, nil, errors.New("not enough information")
+	}
+	thanosClient, err := api.NewClient(api.Config{
+		Address: c.cfg.Sources.Thanos.InternalEndpoint,
+	})
 	if err != nil {
-		// Assuming path, not implemented yet.
-		return errors.Wrap(err, "Could not parse an URL")
+		return nil, nil, errors.Wrap(err, "new Thanos HTTP client")
 	}
 
-	for _, s := range c.sources {
-		_, ok, err := s.ParseRequestFromURL(u)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			continue
-		}
-		// DO..
-		//r.Type()
+	level.Debug(c.logger).Log("msg", "calling rules API")
+
+	thanosAPI := v1.NewAPI(thanosClient)
+	rules, err := thanosAPI.Rules(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "rules")
 	}
-	return errors.New("This AI is smart, but not smart enough - did not match this URL with known source ): ")
+
+	var alertRule v1.AlertingRule
+groupLoop:
+	for _, g := range rules.Groups {
+		for _, r := range g.Rules {
+			switch v := r.(type) {
+			case v1.AlertingRule:
+				if v.Name == input.AlertName {
+					alertRule = v
+					break groupLoop
+				}
+			}
+		}
+	}
+
+	level.Debug(c.logger).Log("msg", "calling rules API", "alert", alertRule)
+
+	//level.Debug(c.logger).Log("msg", "Querying Exemplars")
+	//thanosAPI.QueryExemplars(ctx, )
+	//if err != nil {
+	//	return nil, nil, errors.Wrap(err, "exemplars")
+	//}
+	return nil, nil, errors.New("not implemented")
 }

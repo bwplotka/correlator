@@ -88,7 +88,7 @@ func runMain() (err error) {
 		return errors.New("Set -config or -config-file!")
 	}
 
-	c, err := correlator.New(cfg)
+	c, err := correlator.New(cfg, logger)
 	if err != nil {
 		return errors.Wrap(err, "new correlator")
 	}
@@ -125,15 +125,19 @@ func runMain() (err error) {
 			httpErrHandle(w, http.StatusBadRequest, errors.New("url paramater is required."))
 			return
 		}
-		correlations, err := c.CorrelateFromURL(r.Context(), urlParam[0])
+		discoveries, correlations, err := c.Correlate(r.Context(), correlator.Input{})
 		if err != nil {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 			return
 		}
 
 		b, err := json.Marshal(struct {
+			Discoveries  []correlator.Discoveries
 			Correlations []correlator.Correlation
-		}{Correlations: correlations})
+		}{
+			Discoveries:  discoveries,
+			Correlations: correlations,
+		})
 		if err != nil {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 			return
