@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 type Correlator struct {
@@ -25,18 +26,10 @@ type source interface {
 type request interface {
 }
 
-// Matcher metricLabelMatcher a matches the value of a given label.
-type metricLabelMatcher struct {
-	Name  string
-	Value string
-	Logic string
-}
-
 type metricRequest struct {
-	Matchers  []metricLabelMatcher
+	Matchers  []*labels.Matcher
 	StartTime time.Time
 	EndTime   time.Time
-	Step      time.Duration
 }
 
 func New(cfg Config, logger log.Logger) (*Correlator, error) {
