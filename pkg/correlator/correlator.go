@@ -27,7 +27,7 @@ func New(cfg Config, logger log.Logger) (*Correlator, error) {
 }
 
 type Correlation struct {
-	Error       error `json:";omitempty"`
+	Error       error `json:",omitempty"`
 	Description string
 	URL         string
 }
@@ -96,7 +96,7 @@ groupLoop:
 		}
 
 		if len(res) == 0 {
-			level.Error(c.logger).Log("no exemplars found for series in question")
+			level.Error(c.logger).Log("msg", "no exemplars found for series in question")
 		} else {
 			level.Debug(c.logger).Log("msg", "found exemplars, taking first", "len", len(res))
 			// TODO(bwplotka): Un-hardcode trace id.

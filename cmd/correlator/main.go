@@ -132,7 +132,7 @@ func runMain() (err error) {
 		}
 
 		b, err := json.Marshal(struct {
-			Discoveries  []correlator.Discoveries
+			Discoveries  []correlator.Discovery
 			Correlations []correlator.Correlation
 		}{
 			Discoveries:  discoveries,
