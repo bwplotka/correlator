@@ -3,7 +3,7 @@ module github.com/bwplotka/correlator/examples/observability/ping
 go 1.17
 
 require (
-	github.com/bwplotka/tracing-go v0.0.0-20220512192909-58352846de34
+	github.com/bwplotka/tracing-go v0.0.0-20220518223120-8a8cfb6fef98
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
 	github.com/go-kit/log v0.2.0
 	github.com/oklog/run v1.1.0

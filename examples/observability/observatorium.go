@@ -92,7 +92,10 @@ groups:
 	}
 
 	rule := ruleFuture.InitStateless(filepath.Join(ruleFuture.InternalDir(), "rules"), []httpconfig.Config{
-		{EndpointsConfig: httpconfig.EndpointsConfig{StaticAddresses: []string{"http://" + o.querier.InternalEndpoint("http")}}},
+		{EndpointsConfig: httpconfig.EndpointsConfig{
+			StaticAddresses: []string{o.querier.InternalEndpoint("http")},
+			Scheme:          "http",
+		}},
 	}, []*config.RemoteWriteConfig{{URL: &commoncfg.URL{URL: u}}})
 
 	// Loki + Grafana as Loki does not have it's own UI.

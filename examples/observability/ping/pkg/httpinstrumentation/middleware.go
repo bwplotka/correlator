@@ -115,7 +115,9 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 				responseSize,
 				promhttp.InstrumentHandlerDuration(
 					requestDuration,
-					handler,
+					http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
+						handler.ServeHTTP(writer, r)
+					}),
 					promhttp.WithExemplarFromRequestContext(getExemplarFn),
 				),
 			),

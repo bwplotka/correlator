@@ -27,11 +27,11 @@ const correlatorVersion = "v0.1.0"
 const html = `
 <html>
     <head>
-    <title>Correlator</title>
+    <title>Hello KubeConEU!</title>
     </head>
     <body>
         <form action="/correlate" method="post">
-            URL: <input type="url" name="url">
+            Alert Firing? Tell me the Alert Name! <input type="alertname" name="alertname">
             <input type="submit" value="Correlate", >
         </form>
     </body>
@@ -120,12 +120,12 @@ func runMain() (err error) {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 		}
 
-		urlParam := r.Form["url"]
-		if urlParam[0] == "" {
-			httpErrHandle(w, http.StatusBadRequest, errors.New("url paramater is required."))
+		alertName := r.Form["alertname"]
+		if alertName[0] == "" {
+			httpErrHandle(w, http.StatusBadRequest, errors.New("alertname parameter is required."))
 			return
 		}
-		discoveries, correlations, err := c.Correlate(r.Context(), correlator.Input{})
+		discoveries, correlations, err := c.Correlate(r.Context(), correlator.Input{AlertName: alertName[0]})
 		if err != nil {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 			return
