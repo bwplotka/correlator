@@ -106,6 +106,7 @@ groupLoop:
 	firstMatchers := selectors[0]
 
 	var exampleRequestID string // Or traceID, same thing.
+	var exRes v1.ExemplarQueryResult
 	if !input.IgnoreExemplar {
 		// Get time range from expression.
 		res, err := thanosAPI.QueryExemplars(ctx, alertRule.Query, time.Now().Add(-5*time.Minute), time.Now())
@@ -118,7 +119,6 @@ groupLoop:
 		} else {
 			level.Debug(c.logger).Log("msg", "found exemplars, taking first", "len", len(res), "query", alertRule.Query)
 
-			var exRes v1.ExemplarQueryResult
 			for _, r := range res {
 				match := true
 				for _, m := range firstMatchers {
@@ -182,7 +182,10 @@ groupLoop:
 	if exampleRequestID != "" {
 		corr = append(corr, Correlation{
 			Description: "Log View connected to that request ID in Loki via Grafana",
-			URL:         "http://" + c.cfg.Sources.Loki.UISource.ExternalEndpoint + "/trace/" + exampleRequestID,
+			// TODO(bwplotka): yolo - unhardcode.
+			URL: "http://" + c.cfg.Sources.Loki.UISource.ExternalEndpoint +
+				`/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Logging%22,%7B%22refId%22:%22A%22,%22expr%22:%22%7Bjobs%3D%5C%22` +
+				string(exRes.SeriesLabels["job"]) + `%5C%22%7D%20%7C%3D%20%5C%22` + exampleRequestID + `%5C%22%5Cn%22%7D%5D`,
 		})
 		corr = append(corr, Correlation{
 			Description: "Trace View in Jaeger",
