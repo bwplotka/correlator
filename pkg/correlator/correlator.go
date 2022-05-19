@@ -3,6 +3,8 @@ package correlator
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -10,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
@@ -33,7 +36,8 @@ type Correlation struct {
 }
 
 type Input struct {
-	AlertName string
+	AlertName      string
+	IgnoreExemplar bool
 }
 
 type Discovery string
@@ -82,32 +86,11 @@ groupLoop:
 
 	level.Debug(c.logger).Log("msg", "found firing alert", "alert", alert.Labels)
 
+	d = append(d, Discovery(fmt.Sprintf("Alert is indeed firing... 😱 Its labels: %v", alert.Labels)))
+
 	lbl := alert.Labels.Clone()
 	for predef := range alertRule.Labels {
 		delete(lbl, predef)
-	}
-
-	var exampleRequestID string // Or traceID, same thing.
-	{
-		// Get time range from expression.
-		res, err := thanosAPI.QueryExemplars(ctx, alertRule.Query, time.Now().Add(-5*time.Minute), time.Now())
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "exemplars")
-		}
-
-		if len(res) == 0 {
-			level.Error(c.logger).Log("msg", "no exemplars found for series in question", "query", alertRule.Query)
-		} else {
-			level.Debug(c.logger).Log("msg", "found exemplars, taking first", "len", len(res), "query", alertRule.Query, "series", res[0].SeriesLabels, "labels", res[0].Exemplars[0].Labels)
-
-			// TODO(bwplotka): Un-hardcode traceID key.
-			exampleRequestID = string(res[0].Exemplars[0].Labels["traceID"])
-			if exampleRequestID == "" {
-				level.Error(c.logger).Log("msg", "no traceID key in labels")
-			} else {
-				d = append(d, Discovery(fmt.Sprintf("Example Trace/Request ID: %v", exampleRequestID)))
-			}
-		}
 	}
 
 	expr, err := parser.ParseExpr(alertRule.Query)
@@ -120,12 +103,93 @@ groupLoop:
 	if len(selectors) == 0 {
 		return nil, nil, errors.Errorf("can find selectors for %v", alertRule.Query)
 	}
+	firstMatchers := selectors[0]
 
-	var expression string
+	var exampleRequestID string // Or traceID, same thing.
+	if !input.IgnoreExemplar {
+		// Get time range from expression.
+		res, err := thanosAPI.QueryExemplars(ctx, alertRule.Query, time.Now().Add(-5*time.Minute), time.Now())
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "exemplars")
+		}
+
+		if len(res) == 0 {
+			level.Error(c.logger).Log("msg", "no exemplars found for series in question", "query", alertRule.Query)
+		} else {
+			level.Debug(c.logger).Log("msg", "found exemplars, taking first", "len", len(res), "query", alertRule.Query)
+
+			var exRes v1.ExemplarQueryResult
+			for _, r := range res {
+				match := true
+				for _, m := range firstMatchers {
+					l, ok := r.SeriesLabels[model.LabelName(m.Name)]
+					if !ok {
+						continue
+					}
+					if !m.Matches(string(l)) {
+						match = false
+						break
+					}
+				}
+				if !match {
+					continue
+				}
+
+				exRes = r
+				break
+			}
+
+			if len(exRes.Exemplars) == 0 {
+				level.Error(c.logger).Log("msg", "no exemplars matching ):", "matchers", fmt.Sprintf("%v", firstMatchers))
+			} else {
+				level.Debug(c.logger).Log("msg", "found exemplar", "series", exRes.SeriesLabels, "labels", exRes.Exemplars[0].Labels)
+
+				//for _, r := range res {
+				//	for _, e := range r.Exemplars {
+				//		fmt.Println(e.Labels)
+				//	}
+				//	fmt.Println(r.SeriesLabels)
+				//}
+
+				// TODO(bwplotka): Un-hardcode traceID key.
+				exampleRequestID = string(exRes.Exemplars[0].Labels["traceID"])
+				if exampleRequestID == "" {
+					level.Error(c.logger).Log("msg", "no traceID key in labels")
+				} else {
+					d = append(d, Discovery(fmt.Sprintf("We found example Trace/Request ID for you! %v 🤗", exampleRequestID)))
+
+				}
+			}
+		}
+	}
+
+	// Thanos Metrics view.
+
+	// TODO(bwplotka): Create lib for building query?
+	strMatchers := make([]string, 0, 10)
+	for _, matcher := range selectors[0] {
+		strMatchers = append(strMatchers, matcher.String())
+	}
+
 	corr = append(corr, Correlation{
 		Description: "Metric View in Thanos",
-		URL:         "http://" + c.cfg.Sources.Thanos.ExternalEndpoint + `/graph?g0.expr=` + expression + `&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s`,
+		URL: "http://" + c.cfg.Sources.Thanos.ExternalEndpoint +
+			`/graph?g0.expr=` + url.QueryEscape(fmt.Sprintf("{%s}", strings.Join(strMatchers, ","))) +
+			`&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s`,
 	})
+
+	// Exemplars path.
+	if exampleRequestID != "" {
+		corr = append(corr, Correlation{
+			Description: "Log View connected to that request ID in Loki via Grafana",
+			URL:         "http://" + c.cfg.Sources.Loki.UISource.ExternalEndpoint + "/trace/" + exampleRequestID,
+		})
+		corr = append(corr, Correlation{
+			Description: "Trace View in Jaeger",
+			URL:         "http://" + c.cfg.Sources.Jaeger.ExternalEndpoint + "/trace/" + exampleRequestID,
+		})
+		return d, corr, nil
+	}
 
 	return d, corr, nil
 }

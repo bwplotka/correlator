@@ -23,6 +23,7 @@ type ThanosSource struct {
 
 type LokiSource struct {
 	Source
+	UISource Source
 }
 
 type JaegerSource struct {

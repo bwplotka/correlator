@@ -32,7 +32,9 @@ const html = `
     <body>
         <form action="/correlate" method="post">
             Alert Firing? Tell me the Alert Name! <input type="alertname" name="alertname">
-            <input type="submit" value="Correlate", >
+			</br>
+			Wanna us to use Exemplars too? <input type="checkbox" name="useExemplar">
+            <input type="submit" value="Correlate">
         </form>
     </body>
 </html>
@@ -120,12 +122,20 @@ func runMain() (err error) {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 		}
 
+		in := correlator.Input{IgnoreExemplar: true}
+		
+		useExemplar := r.Form["useExemplar"]
+		if len(useExemplar) > 0 && useExemplar[0] == "on" {
+			in.IgnoreExemplar = false
+		}
+
 		alertName := r.Form["alertname"]
 		if len(alertName) == 0 {
 			httpErrHandle(w, http.StatusBadRequest, errors.New("alertname parameter is required."))
 			return
 		}
-		discoveries, correlations, err := c.Correlate(r.Context(), correlator.Input{AlertName: alertName[0]})
+		in.AlertName = alertName[0]
+		discoveries, correlations, err := c.Correlate(r.Context(), in)
 		if err != nil {
 			httpErrHandle(w, http.StatusInternalServerError, err)
 			return

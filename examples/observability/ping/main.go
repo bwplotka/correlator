@@ -108,7 +108,7 @@ func nastyBugIAccidentialyPut() {
 			}
 		}
 	}()
-	time.Sleep(1 * time.Second)
+	time.Sleep(1234 * time.Millisecond)
 	close(done)
 }
 

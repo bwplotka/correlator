@@ -128,6 +128,10 @@ groups:
 						InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
 						ExternalEndpoint: o.loki.Endpoint("http"),
 					},
+					UISource: correlator.Source{
+						InternalEndpoint: o.grafana.Endpoint("http"),
+						ExternalEndpoint: o.grafana.Endpoint("http"),
+					},
 				},
 				Jaeger: correlator.JaegerSource{
 					Source: correlator.Source{
