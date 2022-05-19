@@ -172,7 +172,10 @@ org_role = Admin
 [security]
 cookie_samesite = none
 [feature_toggles]
-enable = tempoSearch tempoBackendSearch`
+enable = tempoSearch tempoBackendSearch
+[log]
+level = error
+`
 	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "grafana.ini"), []byte(config), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create grafana config failed"))
 	}

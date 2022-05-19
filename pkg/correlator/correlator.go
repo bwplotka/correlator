@@ -171,10 +171,19 @@ groupLoop:
 		strMatchers = append(strMatchers, matcher.String())
 	}
 
+	query := fmt.Sprintf("{%s}", strings.Join(strMatchers, ","))
+	for _, matcher := range selectors[0] {
+		if matcher.Name == "__name__" {
+			if strings.HasSuffix(matcher.Value, "_total") {
+				query = "rate(" + query + "[1m])"
+			}
+		}
+	}
+
 	corr = append(corr, Correlation{
 		Description: "Metric View in Thanos",
 		URL: "http://" + c.cfg.Sources.Thanos.ExternalEndpoint +
-			`/graph?g0.expr=` + url.QueryEscape(fmt.Sprintf("{%s}", strings.Join(strMatchers, ","))) +
+			`/graph?g0.expr=` + url.QueryEscape(query) +
 			`&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s`,
 	})
 

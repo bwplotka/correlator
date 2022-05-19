@@ -128,10 +128,13 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 	if ins.logMiddleware != nil {
 		// Add context values that gives more context to request logging.
 		next := base
-		base = ins.logMiddleware.WrapHandler(handlerName, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		base = ins.logMiddleware.WrapHandler(handlerName, next)
+
+		next = base
+		base = func(w http.ResponseWriter, r *http.Request) {
 			spanCtx := tracing.GetSpan(r.Context()).Context()
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), logging.RequestIDCtxKey, spanCtx.TraceID())))
-		}))
+		}
 	}
 
 	if ins.traceMiddleware != nil {
