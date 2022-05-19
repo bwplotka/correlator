@@ -8,7 +8,9 @@ require (
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
 	github.com/ghodss/yaml v1.0.0
 	github.com/pkg/errors v0.9.1
-	github.com/thanos-io/thanos v0.26.1-0.20220513152734-b9f70568e865
+	github.com/prometheus/common v0.34.0
+	github.com/prometheus/prometheus v1.8.2-0.20220308163432-03831554a519
+	github.com/thanos-io/thanos v0.26.1-0.20220519065005-69ca63c0411e
 )
 
 require (
@@ -123,12 +125,10 @@ require (
 	github.com/prometheus/alertmanager v0.23.1-0.20210914172521-e35efbddb66a // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.34.0 // indirect
 	github.com/prometheus/common/sigv4 v0.1.0 // indirect
 	github.com/prometheus/exporter-toolkit v0.7.1 // indirect
 	github.com/prometheus/node_exporter v1.0.0-rc.0.0.20200428091818-01054558c289 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
-	github.com/prometheus/prometheus v1.8.2-0.20220308163432-03831554a519 // indirect
 	github.com/rs/xid v1.2.1 // indirect
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect

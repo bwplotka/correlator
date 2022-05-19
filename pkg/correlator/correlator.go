@@ -96,13 +96,17 @@ groupLoop:
 		}
 
 		if len(res) == 0 {
-			level.Error(c.logger).Log("msg", "no exemplars found for series in question")
+			level.Error(c.logger).Log("msg", "no exemplars found for series in question", "query", alertRule.Query)
 		} else {
-			level.Debug(c.logger).Log("msg", "found exemplars, taking first", "len", len(res))
-			// TODO(bwplotka): Un-hardcode trace id.
+			level.Debug(c.logger).Log("msg", "found exemplars, taking first", "len", len(res), "query", alertRule.Query, "series", res[0].SeriesLabels, "labels", res[0].Exemplars[0].Labels)
 
-			exampleRequestID = string(res[0].Exemplars[0].Labels["trace-id"])
-			d = append(d, Discovery(fmt.Sprintf("Example Trace/Request ID: %v", exampleRequestID)))
+			// TODO(bwplotka): Un-hardcode traceID key.
+			exampleRequestID = string(res[0].Exemplars[0].Labels["traceID"])
+			if exampleRequestID == "" {
+				level.Error(c.logger).Log("msg", "no traceID key in labels")
+			} else {
+				d = append(d, Discovery(fmt.Sprintf("Example Trace/Request ID: %v", exampleRequestID)))
+			}
 		}
 	}
 

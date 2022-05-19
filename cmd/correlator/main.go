@@ -121,7 +121,7 @@ func runMain() (err error) {
 		}
 
 		alertName := r.Form["alertname"]
-		if alertName[0] == "" {
+		if len(alertName) == 0 {
 			httpErrHandle(w, http.StatusBadRequest, errors.New("alertname parameter is required."))
 			return
 		}
