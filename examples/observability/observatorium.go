@@ -3,12 +3,18 @@ package observability
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 
+	"github.com/bwplotka/correlator/pkg/correlator"
 	"github.com/efficientgo/e2e"
+	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
+	commoncfg "github.com/prometheus/common/config"
+	"github.com/prometheus/prometheus/config"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -47,16 +53,50 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 	o := &Observatorium{}
 
 	// Start Thanos for metrics.
-	// Simplified stack - no compaction, no object storage, just filesystem and inmem WAL.
+	// Simplified stack - no compaction, no object storage, just filesystem and inmem WAL, plus ruling/alerting.
+	ruleFuture := e2ethanos.NewRulerBuilder(env, backendName).
+		WithImage("quay.io/thanos/thanos:v0.26.0")
 	o.receive = e2ethanos.NewReceiveBuilder(env, backendName).
 		WithExemplarsInMemStorage(1e6).
 		WithImage("quay.io/thanos/thanos:v0.26.0").
 		Init()
 	o.querier = e2ethanos.NewQuerierBuilder(env, backendName).
 		WithStoreAddresses(o.receive.InternalEndpoint("grpc")).
+		WithRuleAddresses(ruleFuture.InternalEndpoint("grpc")).
 		WithExemplarAddresses(o.receive.InternalEndpoint("grpc")).
 		WithImage("quay.io/thanos/thanos:v0.26.0").
 		Init()
+
+	u, err := url.Parse(e2ethanos.RemoteWriteEndpoint(o.receive.InternalEndpoint("remote-write")))
+	if err != nil {
+		return nil, err
+	}
+
+	const pingHTTPErrorsAlert = `
+groups:
+- name: ping-service-alerts
+  interval: 5s
+  rules:
+  - alert: PingService_TooManyErrors
+    expr: sum(rate(http_requests_total{handler="/ping",code!~"2.."}[1m])) by (job, instance) / sum(rate(http_requests_total{handler="/ping"}[1m])) by (job, instance) > 0.3
+    labels:
+      severity: page
+    annotations:
+      summary: "To many ping errors!"
+`
+	if err := os.MkdirAll(filepath.Join(ruleFuture.Dir(), "rules"), os.ModePerm); err != nil {
+		return nil, err
+	}
+	if err := ioutil.WriteFile(filepath.Join(ruleFuture.Dir(), "rules", "alert.yaml"), []byte(pingHTTPErrorsAlert), 0666); err != nil {
+		return nil, err
+	}
+
+	rule := ruleFuture.InitStateless(filepath.Join(ruleFuture.InternalDir(), "rules"), []httpconfig.Config{
+		{EndpointsConfig: httpconfig.EndpointsConfig{
+			StaticAddresses: []string{o.querier.InternalEndpoint("http")},
+			Scheme:          "http",
+		}},
+	}, []*config.RemoteWriteConfig{{URL: &commoncfg.URL{URL: u}}})
 
 	// Loki + Grafana as Loki does not have it's own UI.
 	o.loki = NewLoki(env, backendName)
@@ -68,7 +108,53 @@ func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 	// Profiles.
 	// TODO
 
-	return o, e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger)
+	if err := e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger, rule); err != nil {
+		return nil, err
+	}
+
+	{
+		// Correlator, dev side!
+		// TODO(bwplotka): For test purposes, just create config.
+		c := correlator.Config{
+			Sources: correlator.Sources{
+				Thanos: correlator.ThanosSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
+						ExternalEndpoint: o.querier.Endpoint("http"),
+					},
+				},
+				Loki: correlator.LokiSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
+						ExternalEndpoint: o.loki.Endpoint("http"),
+					},
+					UISource: correlator.Source{
+						InternalEndpoint: o.grafana.Endpoint("http"),
+						ExternalEndpoint: o.grafana.Endpoint("http"),
+					},
+				},
+				Jaeger: correlator.JaegerSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
+						ExternalEndpoint: o.jaeger.Endpoint("http"),
+					},
+				},
+				Parca: correlator.ParcaSource{
+					// TBD
+				},
+			},
+		}
+		b, err := yaml.Marshal(&c)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(filepath.Join("/home/bwplotka/Repos/correlator/config.yaml"), b, os.ModePerm); err != nil {
+			return nil, err
+		}
+
+	}
+
+	return o, nil
 }
 
 // NewLokiGrafana was blamelessly copied (and adjusted) from Ian's demo, thanks to the fact we all use e2e framework.
@@ -195,13 +281,12 @@ func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
 	return e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
 		WithPorts(
 			map[string]int{
-				"http.front":                16000,
+				"http":                      16686,
 				"http.admin":                14269,
 				"jaeger.thrift-model.proto": 14250, //	 gRPC	used by jaeger-agent to send spans in model.proto format
 			}, "http.admin").
 		Init(e2e.StartOptions{
 			Image:     "jaegertracing/all-in-one:1.33",
-			Command:   e2e.NewCommand("--collector.http-server.host-port=:16000"),
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
 }

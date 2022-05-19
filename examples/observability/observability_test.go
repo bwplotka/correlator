@@ -26,7 +26,7 @@ const clientClusterName = "eu1-valencia"
 // Now with this we will run "correlator" service in Observatorium that will hook into Grafana links and present a simple JSON result that allows navigating to different views and UIs.
 // NOTE(bwplotka): Prerequsite is to run make docker from root of this repo.
 func TestCorrelatorWithObservability(t *testing.T) {
-	env, err := e2e.NewDockerEnvironment(backendName)
+	env, err := e2e.NewDockerEnvironment("e2e-correlation")
 	testutil.Ok(t, err)
 	t.Cleanup(env.Close)
 
@@ -45,9 +45,9 @@ func TestCorrelatorWithObservability(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent))
 	}
 
-	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")+"/graph?g0.expr=rate(http_requests_total%7Bhandler%3D\"%2Fping\"%2C%20instance%3D\"e2e-correlation-ping-eu1-valencia%3A8080\"%7D%5B5m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D"))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
-	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http.front")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 
@@ -86,8 +86,8 @@ func NewObservablePingService(env e2e.Environment, name, traceEndpoint string) O
 		User:  strconv.Itoa(os.Getuid()),
 		Command: e2e.NewCommandWithoutEntrypoint("/bin/ping",
 			"-set-version=v0.0.7",
-			"-latency=90%500ms,10%200ms",
-			"-success-prob=65",
+			"-latency=90%300ms,10%200ms",
+			"-success-prob=45",
 			"-trace-endpoint="+traceEndpoint,
 			"-log-file="+o.LogFile(),
 			"-log-level=debug",
@@ -113,7 +113,7 @@ func NewObservablePingerService(env e2e.Environment, name string, ping e2e.Runna
 		User:  strconv.Itoa(os.Getuid()),
 		Command: e2e.NewCommandWithoutEntrypoint("/bin/pinger",
 			"-endpoint=http://"+ping.InternalEndpoint("http")+"/ping",
-			"-pings-per-second=10",
+			"-pings-per-second=1",
 			"-trace-endpoint="+traceEndpoint,
 			"-log-file="+o.LogFile(),
 			"-log-level=debug",
@@ -160,6 +160,7 @@ func NewGrafanaAgent(f e2e.FutureInstrumentedRunnable, obs *Observatorium, obser
 	}
 
 	// TODO(bwplotka): Can we have that tail tracing solution? (:
+	// https://grafana.com/docs/mimir/latest/operators-guide/using-exemplars/before-you-begin/ is useful!
 	config := fmt.Sprintf(`
 server:
   log_level: info
@@ -171,6 +172,7 @@ metrics:
       cluster: eu1-valencia-laptop
     remote_write:
     - url: %s
+      send_exemplars: true
   configs:
   - name: default
     scrape_configs:

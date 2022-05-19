@@ -3,13 +3,13 @@ module github.com/bwplotka/correlator/examples/observability/ping
 go 1.17
 
 require (
-	github.com/bwplotka/tracing-go v0.0.0-20220512192909-58352846de34
+	github.com/bwplotka/tracing-go v0.0.0-20220518223120-8a8cfb6fef98
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
 	github.com/go-kit/log v0.2.0
 	github.com/oklog/run v1.1.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.12.1
-	github.com/prometheus/common v0.32.1
+	github.com/prometheus/client_golang v1.12.2-0.20220518211309-250120db35df
+	github.com/prometheus/common v0.34.0
 )
 
 require (
@@ -38,8 +38,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.7.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.15.0 // indirect
 	go.uber.org/goleak v1.1.12 // indirect
-	golang.org/x/net v0.0.0-20210917221730-978cfadd31cf // indirect
-	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
+	golang.org/x/sys v0.0.0-20220328115105-d36c6a25d886 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1 // indirect
 	google.golang.org/grpc v1.45.0 // indirect

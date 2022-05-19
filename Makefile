@@ -54,7 +54,7 @@ docs: $(MDOX) ## Generates config snippets and doc formatting.
 .PHONY: docker
 docker: ## Build code and docker images for correlator:latest and ping:latest
 	@echo ">> building docker images $(PATH)"
-	#@docker build . -t correlator:latest
+	@docker build . -t correlator:latest
 	@cd examples/observability/ping && docker build . -t ping:latest
 
 .PHONY: format

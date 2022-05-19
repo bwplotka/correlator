@@ -3,8 +3,6 @@ package httpinstrumentation
 import (
 	"context"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 	"github.com/bwplotka/tracing-go/tracing"
@@ -101,31 +99,29 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 		},
 		[]string{"method", "code"},
 	)
-	// TODO(bwplotka): Add exemplars everywhere when supported: https://github.com/prometheus/client_golang/issues/854
+
+	getExemplarFn := func(ctx context.Context) prometheus.Labels {
+		if spanCtx := tracing.GetSpan(ctx); spanCtx.Context().IsSampled() {
+			return prometheus.Labels{"traceID": spanCtx.Context().TraceID()}
+		}
+		return nil
+	}
+
 	base := promhttp.InstrumentHandlerRequestSize(
 		requestSize,
 		promhttp.InstrumentHandlerCounter(
 			requestsTotal,
 			promhttp.InstrumentHandlerResponseSize(
 				responseSize,
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					now := time.Now()
-
-					wd := logging.WrapResponseWriterWithStatus(w)
-					handler.ServeHTTP(wd, r)
-
-					observer := requestDuration.WithLabelValues(strings.ToLower(r.Method), wd.Status())
-
-					if spanCtx := tracing.GetSpan(r.Context()); spanCtx.Context().IsSampled() {
-						traceID := prometheus.Labels{"traceID": spanCtx.Context().TraceID()}
-						observer.(prometheus.ExemplarObserver).ObserveWithExemplar(time.Since(now).Seconds(), traceID)
-						return
-					}
-
-					observer.Observe(time.Since(now).Seconds())
-					return
-				}),
+				promhttp.InstrumentHandlerDuration(
+					requestDuration,
+					http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
+						handler.ServeHTTP(writer, r)
+					}),
+					promhttp.WithExemplarFromRequestContext(getExemplarFn),
+				),
 			),
+			promhttp.WithExemplarFromRequestContext(getExemplarFn),
 		),
 	)
 
