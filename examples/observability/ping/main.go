@@ -7,15 +7,15 @@ import (
 	stdlog "log"
 	"math/rand"
 	"net/http"
+	httppprof "net/http/pprof"
 	"os"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/bwplotka/correlator/examples/observability/ping/pkg/httpinstrumentation"
-	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 	"github.com/bwplotka/tracing-go/tracing"
 	"github.com/bwplotka/tracing-go/tracing/exporters/otlp"
 	"github.com/efficientgo/tools/core/pkg/errcapture"
@@ -27,6 +27,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/httpinstrumentation"
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 )
 
 var (
@@ -114,17 +117,24 @@ func nastyBugIAccidentialyPut() {
 
 func pingHandler(logger log.Logger, latDecider *latencyDecider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		latDecider.AddLatency(r.Context(), logger)
 
-		if err := tracing.DoInSpan(r.Context(), "evaluatePing", func(ctx context.Context) error {
-			tracing.GetSpan(ctx).SetAttributes("successProbability", *successProb)
-			level.Debug(logger).Log("msg", "evaluating ping", "successProbability", *successProb)
+		if err := tracing.DoInSpan(ctx, "evaluatePing", func(ctx context.Context) error {
+			var err error
+			spanCtx := tracing.GetSpan(ctx)
+			pprof.Do(r.Context(), pprof.Labels("trace_id", spanCtx.Context().TraceID()), func(ctx context.Context) {
+				err = func() error {
+					tracing.GetSpan(ctx).SetAttributes("successProbability", *successProb)
+					level.Debug(logger).Log("msg", "evaluating ping", "successProbability", *successProb)
 
-			if rand.Float64()*100 <= *successProb {
-				return nil
-			}
-			nastyBugIAccidentialyPut()
-			return errors.New("decided to NOT return success, sorry")
+					if rand.Float64()*100 <= *successProb {
+						return nil
+					}
+					return errors.New("decided to NOT return success, sorry")
+				}()
+			})
+			return err
 		}); err != nil {
 			w.WriteHeader(http.StatusTeapot)
 			// Not smart to pass error straight away. Sanitize on production.
@@ -203,6 +213,12 @@ func runMain() (err error) {
 		)))
 	m.HandleFunc("/ping", httpinstrumentation.NewMiddleware(reg, nil, logger, tracer).
 		WrapHandler("/ping", pingHandler(logger, latDecider)))
+
+	m.HandleFunc("/debug/pprof/", httppprof.Index)
+	m.HandleFunc("/debug/pprof/cmdline", httppprof.Cmdline)
+	m.HandleFunc("/debug/pprof/profile", httppprof.Profile)
+	m.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
+	m.HandleFunc("/debug/pprof/trace", httppprof.Trace)
 
 	srv := http.Server{Addr: *addr, Handler: m}
 
