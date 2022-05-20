@@ -184,14 +184,16 @@ groupLoop:
 		Description: "Metric View for the source of Alert [Thanos]",
 		URL: "http://" + c.cfg.Sources.Thanos.ExternalEndpoint +
 			`/graph?g0.expr=` + url.QueryEscape(query) +
-			`&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s`,
+			`&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s&` +
+			`g1.expr=` + url.QueryEscape(strings.TrimSuffix(alertRule.Query, " > 0.3")) +
+			`&g1.tab=0&g1.stacked=0&g1.range_input=15m&g1.max_source_resolution=0s&`,
 	})
 
 	// Exemplars path.
 	if exampleRequestID != "" {
 		corr = append(corr, Correlation{
 			Description: "Log View connected to the Exemplar [Loki via Grafana]",
-			// TODO(bwplotka): yolo - unhardcode.
+			// TODO(bwplotka): yolo - unhardcode!
 			URL: "http://" + c.cfg.Sources.Loki.UISource.ExternalEndpoint +
 				`/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Logging%22,%7B%22refId%22:%22A%22,%22expr%22:%22%7Bjobs%3D%5C%22` +
 				string(exRes.SeriesLabels["job"]) + `%5C%22%7D%20%7C%3D%20%5C%22` + exampleRequestID + `%5C%22%5Cn%22%7D%5D`,
@@ -203,11 +205,27 @@ groupLoop:
 		corr = append(corr, Correlation{
 			Description: "Profiles View connected to the Exemplar [Parca]",
 			URL: "http://" + c.cfg.Sources.Parca.ExternalEndpoint +
-				`/?currentProfileView=icicle&expression_a=process_cpu%3Asamples%3Acount%3Acpu%3Ananoseconds%3Adelta%7Bprofile_label_trace_id%3D%22` +
-				exampleRequestID + `%22%7D&merge_a=false&time_selection_a=relative:hour%7C1`,
+				`/?currentProfileView=icicle&expression_a=process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%3Adelta%7Bprofile_label_trace_id%3D%22` +
+				exampleRequestID + `%22%2C%20job%3D%22` + "e2e-correlation-" + string(exRes.SeriesLabels["job"]) + `%3A8080%22%7D&merge_a=true&time_selection_a=relative:hour|1`,
 		})
 		return d, corr, nil
 	}
 
+	corr = append(corr, Correlation{
+		Description: "Log View for the same container and time [Loki via Grafana]",
+		// TODO(bwplotka): yolo - unhardcode!
+		URL: "http://" + c.cfg.Sources.Loki.UISource.ExternalEndpoint +
+			`/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Logging%22,%7B%22refId%22:%22A%22,%22expr%22:%22%7Bjobs%3D%5C%22` + string(alert.Labels["job"]) + `%5C%22%7D%22%7D%5D`,
+	})
+	corr = append(corr, Correlation{
+		Description: "Trace View for the same container and time [Jaeger]",
+		URL:         "http://" + c.cfg.Sources.Jaeger.ExternalEndpoint + "/search?end=1653036151287000&limit=20&lookback=1h&maxDuration&minDuration&service=demo%3Aping&start=1653032551287000",
+	})
+	corr = append(corr, Correlation{
+		Description: "Profiles View for the same container and time [Parca]",
+		URL: "http://" + c.cfg.Sources.Parca.ExternalEndpoint +
+			`/?currentProfileView=icicle&expression_a=process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%3Adelta%7B` +
+			`%20job%3D%22` + "e2e-correlation-" + string(alert.Labels["job"]) + `%3A8080%22%7D&merge_a=true&time_selection_a=relative:hour|1`,
+	})
 	return d, corr, nil
 }

@@ -148,7 +148,7 @@ func (o *Observatorium) StartCorrelator(env e2e.Environment, parca e2e.Runnable)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join("config.yaml"), b, os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join("../../config.yaml"), b, os.ModePerm); err != nil {
 		return nil, err
 	}
 
