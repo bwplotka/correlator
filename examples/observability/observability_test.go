@@ -41,13 +41,17 @@ func TestCorrelatorWithObservability(t *testing.T) {
 		ping := NewObservablePingService(env, clientClusterName, agentFuture.InternalEndpoint("grpc"))
 		pinger := NewObservablePingerService(env, clientClusterName, ping, agentFuture.InternalEndpoint("grpc"))
 
+		// Profiles.
+		o.parca = NewParca(env, backendName, ping)
+
 		agent := NewGrafanaAgent(agentFuture, o, ping, pinger)
-		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent))
+		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent, o.parca))
 	}
 
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")+"/graph?g0.expr=rate(http_requests_total%7Bhandler%3D\"%2Fping\"%2C%20instance%3D\"e2e-correlation-ping-eu1-valencia%3A8080\"%7D%5B5m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=15m&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D"))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.parca.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 

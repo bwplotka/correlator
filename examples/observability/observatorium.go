@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/bwplotka/correlator/pkg/correlator"
 	"github.com/efficientgo/e2e"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
@@ -16,6 +15,8 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
+
+	"github.com/bwplotka/correlator/pkg/correlator"
 )
 
 const backendName = "observatorium"
@@ -24,6 +25,7 @@ type Observatorium struct {
 	receive e2e.Runnable
 	loki    e2e.Runnable
 	jaeger  e2e.Runnable
+	parca   e2e.Runnable
 
 	querier e2e.Runnable
 	grafana e2e.Runnable
@@ -49,7 +51,7 @@ func (o *Observatorium) ProfilesWriteEndpoint() string {
 }
 
 // startObservatorium starts Observatorium (http://observatorium.io/) like simplified setup to mimic multi-signal backend.
-func startObservatorium(env e2e.Environment) (*Observatorium, error) {
+func startObservatorium(env e2e.Environment, targets ...e2e.Runnable) (*Observatorium, error) {
 	o := &Observatorium{}
 
 	// Start Thanos for metrics.
@@ -105,8 +107,10 @@ groups:
 	// Jaeger for traces.
 	o.jaeger = NewJaeger(env, backendName)
 
-	// Profiles.
-	// TODO
+	if len(targets) > 0 {
+		// Profiles.
+		o.parca = NewParca(env, backendName, targets...)
+	}
 
 	if err := e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger, rule); err != nil {
 		return nil, err
@@ -139,16 +143,19 @@ groups:
 						ExternalEndpoint: o.jaeger.Endpoint("http"),
 					},
 				},
-				Parca: correlator.ParcaSource{
-					// TBD
-				},
+				//Parca: correlator.ParcaSource{
+				//	Source: correlator.Source{
+				//		InternalEndpoint: o.parca.Endpoint("http"), // o.parca.InternalEndpoint("http"),
+				//		ExternalEndpoint: o.parca.Endpoint("http"),
+				//	},
+				//},
 			},
 		}
 		b, err := yaml.Marshal(&c)
 		if err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(filepath.Join("/home/bwplotka/Repos/correlator/config.yaml"), b, os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join("config.yaml"), b, os.ModePerm); err != nil {
 			return nil, err
 		}
 
@@ -292,4 +299,46 @@ func NewJaeger(env e2e.Environment, name string) e2e.InstrumentedRunnable {
 			Image:     "jaegertracing/all-in-one:1.33",
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
+}
+
+func NewParca(env e2e.Environment, name string, targets ...e2e.Runnable) e2e.InstrumentedRunnable {
+	f := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("parca-%s", name)).WithPorts(map[string]int{"http": 7070}, "http").Future()
+
+	config := `
+debug_info:
+  bucket:
+    type: "FILESYSTEM"
+    config:
+      directory: "./tmp"
+  cache:
+    type: "FILESYSTEM"
+    config:
+      directory: "./tmp"
+
+scrape_configs:
+#  - job_name: "default"
+#    scrape_interval: "3s"
+#    static_configs:
+#      - targets: [ '127.0.0.1:7070' ]
+`
+	for _, t := range targets {
+		config = config + fmt.Sprintf(`
+  - job_name: "%s"
+    scrape_interval: "3s"
+    static_configs:
+      - targets: [ '%s' ]
+`, t.InternalEndpoint("http"), t.InternalEndpoint("http"))
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "parca.yaml"), []byte(config), 0600); err != nil {
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create parca config failed"))
+	}
+
+	// profile_label_trace_id="0d89ae4c473862caa8d0e79cbdfc13e4"
+	return f.Init(e2e.StartOptions{
+		Image:     "ghcr.io/parca-dev/parca:pprof-label-query",
+		Command:   e2e.NewCommand("/parca", "--config-path="+filepath.Join(f.InternalDir(), "parca.yaml")),
+		User:      strconv.Itoa(os.Getuid()),
+		Readiness: e2e.NewTCPReadinessProbe("http"),
+	})
 }

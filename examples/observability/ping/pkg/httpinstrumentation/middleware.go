@@ -4,13 +4,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 	"github.com/bwplotka/tracing-go/tracing"
 	tracinghttp "github.com/bwplotka/tracing-go/tracing/http"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/bwplotka/correlator/examples/observability/ping/pkg/logging"
 )
 
 // Middleware auto instruments net/http HTTP handlers with:
@@ -104,6 +105,7 @@ func (ins *middleware) WrapHandler(handlerName string, handler http.Handler) htt
 		if spanCtx := tracing.GetSpan(ctx); spanCtx.Context().IsSampled() {
 			return prometheus.Labels{"traceID": spanCtx.Context().TraceID()}
 		}
+
 		return nil
 	}
 
