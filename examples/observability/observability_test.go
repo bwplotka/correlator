@@ -35,6 +35,7 @@ func TestCorrelatorWithObservability(t *testing.T) {
 
 	// Client setup.
 	var parca e2e.Runnable
+	var correlator e2e.Runnable
 	{
 		agentFuture := NewGrafanaAgentFuture(env, clientClusterName)
 
@@ -44,12 +45,10 @@ func TestCorrelatorWithObservability(t *testing.T) {
 
 		// Profiles.
 		parca = NewParca(env, backendName, ping)
+		correlator = o.StartCorrelator(env, backendName, parca)
 
 		agent := NewGrafanaAgent(agentFuture, o, ping, pinger)
-		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent, parca))
-
-		_, err := o.StartCorrelator(env, parca)
-		testutil.Ok(t, err)
+		testutil.Ok(t, e2e.StartAndWaitReady(ping, pinger, agent, parca, correlator))
 	}
 
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.querier.Endpoint("http")+"/alerts"))
@@ -57,6 +56,7 @@ func TestCorrelatorWithObservability(t *testing.T) {
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.grafana.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+o.jaeger.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+parca.Endpoint("http")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+correlator.Endpoint("http")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 

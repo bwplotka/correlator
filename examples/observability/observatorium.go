@@ -111,7 +111,9 @@ groups:
 	return o, nil
 }
 
-func (o *Observatorium) StartCorrelator(env e2e.Environment, parca e2e.Runnable) (e2e.Runnable, error) {
+func (o *Observatorium) StartCorrelator(env e2e.Environment, name string, parca e2e.Runnable) e2e.Runnable {
+	f := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("correlator-%s", name)).WithPorts(map[string]int{"http": 8080}, "http").Future()
+
 	c := correlator.Config{
 		Sources: correlator.Sources{
 			Thanos: correlator.ThanosSource{
@@ -146,13 +148,22 @@ func (o *Observatorium) StartCorrelator(env e2e.Environment, parca e2e.Runnable)
 	}
 	b, err := yaml.Marshal(&c)
 	if err != nil {
-		return nil, err
+		return e2e.NewErrInstrumentedRunnable(name, err)
 	}
+	// For debug only.
 	if err := os.WriteFile(filepath.Join("../../config.yaml"), b, os.ModePerm); err != nil {
-		return nil, err
+		return e2e.NewErrInstrumentedRunnable(name, err)
+	}
+	if err := os.WriteFile(filepath.Join(f.Dir(), "config.yaml"), b, os.ModePerm); err != nil {
+		return e2e.NewErrInstrumentedRunnable(name, err)
 	}
 
-	return nil, nil
+	return f.Init(e2e.StartOptions{
+		Image:     "correlator:latest",
+		Command:   e2e.NewCommand("/correlator", "--config-file="+filepath.Join(f.InternalDir(), "config.yaml")),
+		User:      strconv.Itoa(os.Getuid()),
+		Readiness: e2e.NewTCPReadinessProbe("http"),
+	})
 }
 
 // NewLokiGrafana was blamelessly copied (and adjusted) from Ian's demo, thanks to the fact we all use e2e framework.
