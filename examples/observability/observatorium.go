@@ -160,7 +160,7 @@ func (o *Observatorium) StartCorrelator(env e2e.Environment, name string, parca 
 
 	return f.Init(e2e.StartOptions{
 		Image:     "correlator:latest",
-		Command:   e2e.NewCommand("/correlator", "--config-file="+filepath.Join(f.InternalDir(), "config.yaml")),
+		Command:   e2e.NewCommandWithoutEntrypoint("/bin/correlator", "--config-file="+filepath.Join(f.InternalDir(), "config.yaml")),
 		User:      strconv.Itoa(os.Getuid()),
 		Readiness: e2e.NewTCPReadinessProbe("http"),
 	})

@@ -9,6 +9,6 @@ RUN cd cmd/correlator && CGO_ENABLED=0 GOOS=linux go build
 
 FROM scratch
 
-COPY --from=build-env /tmp/workdir/cmd/correlator /bin/correlator
+COPY --from=build-env /tmp/workdir/cmd/correlator/correlator /bin/correlator
 
 CMD ["/bin/correlator"]
