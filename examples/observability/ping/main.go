@@ -131,6 +131,7 @@ func pingHandler(logger log.Logger, latDecider *latencyDecider) http.HandlerFunc
 					if rand.Float64()*100 <= *successProb {
 						return nil
 					}
+					nastyBugIAccidentialyPut()
 					return errors.New("decided to NOT return success, sorry")
 				}()
 			})
