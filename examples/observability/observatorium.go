@@ -112,35 +112,79 @@ groups:
 }
 
 func (o *Observatorium) StartCorrelator(env e2e.Environment, name string, parca e2e.Runnable) e2e.Runnable {
+	{
+		// BACKUP
+		c := correlator.Config{
+			Sources: correlator.Sources{
+				Thanos: correlator.ThanosSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
+						ExternalEndpoint: o.querier.Endpoint("http"),
+					},
+				},
+				Loki: correlator.LokiSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
+						ExternalEndpoint: o.loki.Endpoint("http"),
+					},
+					UISource: correlator.Source{
+						InternalEndpoint: o.grafana.Endpoint("http"),
+						ExternalEndpoint: o.grafana.Endpoint("http"),
+					},
+				},
+				Jaeger: correlator.JaegerSource{
+					Source: correlator.Source{
+						InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
+						ExternalEndpoint: o.jaeger.Endpoint("http"),
+					},
+				},
+				Parca: correlator.ParcaSource{
+					Source: correlator.Source{
+						InternalEndpoint: parca.Endpoint("http"), // o.parca.InternalEndpoint("http"),
+						ExternalEndpoint: parca.Endpoint("http"),
+					},
+				},
+			},
+		}
+		b, err := yaml.Marshal(&c)
+		if err != nil {
+			return e2e.NewErrInstrumentedRunnable(name, err)
+		}
+		// For debug only.
+		if err := os.WriteFile(filepath.Join("../../config.yaml"), b, os.ModePerm); err != nil {
+			return e2e.NewErrInstrumentedRunnable(name, err)
+		}
+	}
+
 	f := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("correlator-%s", name)).WithPorts(map[string]int{"http": 8080}, "http").Future()
 
 	c := correlator.Config{
 		Sources: correlator.Sources{
 			Thanos: correlator.ThanosSource{
 				Source: correlator.Source{
-					InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
+					InternalEndpoint: o.querier.InternalEndpoint("http"),
 					ExternalEndpoint: o.querier.Endpoint("http"),
 				},
 			},
 			Loki: correlator.LokiSource{
 				Source: correlator.Source{
-					InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
+					InternalEndpoint: o.loki.InternalEndpoint("http"),
 					ExternalEndpoint: o.loki.Endpoint("http"),
 				},
 				UISource: correlator.Source{
-					InternalEndpoint: o.grafana.Endpoint("http"),
+					InternalEndpoint: o.grafana.InternalEndpoint("http"),
 					ExternalEndpoint: o.grafana.Endpoint("http"),
 				},
 			},
 			Jaeger: correlator.JaegerSource{
 				Source: correlator.Source{
-					InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
+					InternalEndpoint: o.jaeger.InternalEndpoint("http"),
 					ExternalEndpoint: o.jaeger.Endpoint("http"),
 				},
 			},
 			Parca: correlator.ParcaSource{
 				Source: correlator.Source{
-					InternalEndpoint: parca.Endpoint("http"), // o.parca.InternalEndpoint("http"),
+					InternalEndpoint: parca.InternalEndpoint("http"),
 					ExternalEndpoint: parca.Endpoint("http"),
 				},
 			},
@@ -154,6 +198,7 @@ func (o *Observatorium) StartCorrelator(env e2e.Environment, name string, parca 
 	if err := os.WriteFile(filepath.Join("../../config.yaml"), b, os.ModePerm); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, err)
 	}
+
 	if err := os.WriteFile(filepath.Join(f.Dir(), "config.yaml"), b, os.ModePerm); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, err)
 	}
