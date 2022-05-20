@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/bwplotka/correlator/pkg/correlator"
 	"github.com/efficientgo/e2e"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
@@ -15,8 +16,6 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
-
-	"github.com/bwplotka/correlator/pkg/correlator"
 )
 
 const backendName = "observatorium"
@@ -25,7 +24,6 @@ type Observatorium struct {
 	receive e2e.Runnable
 	loki    e2e.Runnable
 	jaeger  e2e.Runnable
-	parca   e2e.Runnable
 
 	querier e2e.Runnable
 	grafana e2e.Runnable
@@ -51,7 +49,7 @@ func (o *Observatorium) ProfilesWriteEndpoint() string {
 }
 
 // startObservatorium starts Observatorium (http://observatorium.io/) like simplified setup to mimic multi-signal backend.
-func startObservatorium(env e2e.Environment, targets ...e2e.Runnable) (*Observatorium, error) {
+func startObservatorium(env e2e.Environment) (*Observatorium, error) {
 	o := &Observatorium{}
 
 	// Start Thanos for metrics.
@@ -107,61 +105,54 @@ groups:
 	// Jaeger for traces.
 	o.jaeger = NewJaeger(env, backendName)
 
-	if len(targets) > 0 {
-		// Profiles.
-		o.parca = NewParca(env, backendName, targets...)
-	}
-
 	if err := e2e.StartAndWaitReady(o.receive, o.querier, o.loki, o.grafana, o.jaeger, rule); err != nil {
 		return nil, err
 	}
+	return o, nil
+}
 
-	{
-		// Correlator, dev side!
-		// TODO(bwplotka): For test purposes, just create config.
-		c := correlator.Config{
-			Sources: correlator.Sources{
-				Thanos: correlator.ThanosSource{
-					Source: correlator.Source{
-						InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
-						ExternalEndpoint: o.querier.Endpoint("http"),
-					},
+func (o *Observatorium) StartCorrelator(env e2e.Environment, parca e2e.Runnable) (e2e.Runnable, error) {
+	c := correlator.Config{
+		Sources: correlator.Sources{
+			Thanos: correlator.ThanosSource{
+				Source: correlator.Source{
+					InternalEndpoint: o.querier.Endpoint("http"), // o.querier.InternalEndpoint("http"),
+					ExternalEndpoint: o.querier.Endpoint("http"),
 				},
-				Loki: correlator.LokiSource{
-					Source: correlator.Source{
-						InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
-						ExternalEndpoint: o.loki.Endpoint("http"),
-					},
-					UISource: correlator.Source{
-						InternalEndpoint: o.grafana.Endpoint("http"),
-						ExternalEndpoint: o.grafana.Endpoint("http"),
-					},
-				},
-				Jaeger: correlator.JaegerSource{
-					Source: correlator.Source{
-						InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
-						ExternalEndpoint: o.jaeger.Endpoint("http"),
-					},
-				},
-				//Parca: correlator.ParcaSource{
-				//	Source: correlator.Source{
-				//		InternalEndpoint: o.parca.Endpoint("http"), // o.parca.InternalEndpoint("http"),
-				//		ExternalEndpoint: o.parca.Endpoint("http"),
-				//	},
-				//},
 			},
-		}
-		b, err := yaml.Marshal(&c)
-		if err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(filepath.Join("config.yaml"), b, os.ModePerm); err != nil {
-			return nil, err
-		}
-
+			Loki: correlator.LokiSource{
+				Source: correlator.Source{
+					InternalEndpoint: o.loki.Endpoint("http"), // o.loki.InternalEndpoint("http"),
+					ExternalEndpoint: o.loki.Endpoint("http"),
+				},
+				UISource: correlator.Source{
+					InternalEndpoint: o.grafana.Endpoint("http"),
+					ExternalEndpoint: o.grafana.Endpoint("http"),
+				},
+			},
+			Jaeger: correlator.JaegerSource{
+				Source: correlator.Source{
+					InternalEndpoint: o.jaeger.Endpoint("http"), // o.jaeger.InternalEndpoint("http"),
+					ExternalEndpoint: o.jaeger.Endpoint("http"),
+				},
+			},
+			Parca: correlator.ParcaSource{
+				Source: correlator.Source{
+					InternalEndpoint: parca.Endpoint("http"), // o.parca.InternalEndpoint("http"),
+					ExternalEndpoint: parca.Endpoint("http"),
+				},
+			},
+		},
+	}
+	b, err := yaml.Marshal(&c)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join("config.yaml"), b, os.ModePerm); err != nil {
+		return nil, err
 	}
 
-	return o, nil
+	return nil, nil
 }
 
 // NewLokiGrafana was blamelessly copied (and adjusted) from Ian's demo, thanks to the fact we all use e2e framework.
