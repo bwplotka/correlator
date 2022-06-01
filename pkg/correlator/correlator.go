@@ -45,6 +45,7 @@ type Discovery string
 // Correlate provides correlations from the best effort input.
 // NOTE: ARTIFICIAL INTELLIGENCE - USE WITH CARE!
 // TODO(bwplotka): Make it a streaming response.
+// TODO(bwplotka): Compose it better, it's currently a too long function with hardcoded elements for demo purposes.
 func (c *Correlator) Correlate(ctx context.Context, input Input) (d []Discovery, corr []Correlation, _ error) {
 	level.Debug(c.logger).Log("msg", "correlating from Input", "input", fmt.Sprintf("%v", input))
 
@@ -144,13 +145,6 @@ groupLoop:
 			} else {
 				level.Debug(c.logger).Log("msg", "found exemplar", "series", exRes.SeriesLabels, "labels", exRes.Exemplars[0].Labels)
 
-				//for _, r := range res {
-				//	for _, e := range r.Exemplars {
-				//		fmt.Println(e.Labels)
-				//	}
-				//	fmt.Println(r.SeriesLabels)
-				//}
-
 				// TODO(bwplotka): Un-hardcode traceID key.
 				exampleRequestID = string(exRes.Exemplars[0].Labels["traceID"])
 				if exampleRequestID == "" {
@@ -189,6 +183,18 @@ groupLoop:
 			`&g1.tab=0&g1.stacked=0&g1.range_input=15m&g1.max_source_resolution=0s&`,
 	})
 
+	defer func() {
+		// In defer, so it has order we want.
+		// TODO(bwplotka) Check if Parca is configured!
+		// TODO(bwplotka): Parse time!
+		corr = append(corr, Correlation{
+			Description: "Profiles View for the same container and time [Parca]",
+			URL: "http://" + c.cfg.Sources.Parca.ExternalEndpoint +
+				`/?currentProfileView=icicle&expression_a=process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%3Adelta%7B` +
+				`%20job%3D%22` + "e2e-correlation-" + string(alert.Labels["job"]) + `%3A8080%22%7D&merge_a=true&time_selection_a=relative:hour|1`,
+		})
+	}()
+
 	// Exemplars path.
 	if exampleRequestID != "" {
 		corr = append(corr, Correlation{
@@ -202,12 +208,14 @@ groupLoop:
 			Description: "Trace View connected to the Exemplar [Jaeger]",
 			URL:         "http://" + c.cfg.Sources.Jaeger.ExternalEndpoint + "/trace/" + exampleRequestID,
 		})
+		// TODO(bwplotka): Parca storage not always is able to find trace label. Some sampling is happening?
 		corr = append(corr, Correlation{
-			Description: "Profiles View connected to the Exemplar [Parca]",
+			Description: "Experimental: Profiles View connected to the Exemplar [Parca]",
 			URL: "http://" + c.cfg.Sources.Parca.ExternalEndpoint +
 				`/?currentProfileView=icicle&expression_a=process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%3Adelta%7Bprofile_label_trace_id%3D%22` +
 				exampleRequestID + `%22%2C%20job%3D%22` + "e2e-correlation-" + string(exRes.SeriesLabels["job"]) + `%3A8080%22%7D&merge_a=true&time_selection_a=relative:hour|1`,
 		})
+
 		return d, corr, nil
 	}
 
