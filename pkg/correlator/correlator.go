@@ -221,9 +221,10 @@ groupLoop:
 		URL: "http://" + c.cfg.Sources.Loki.UISource.ExternalEndpoint +
 			`/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Logging%22,%7B%22refId%22:%22A%22,%22expr%22:%22%7Bjobs%3D%5C%22` + string(alert.Labels["job"]) + `%5C%22%7D%22%7D%5D`,
 	})
+
 	corr = append(corr, Correlation{
 		Description: "Trace View for the same container and time [Jaeger]",
-		URL:         "http://" + c.cfg.Sources.Jaeger.ExternalEndpoint + "/search?end=1653036151287000&limit=20&lookback=1h&maxDuration&minDuration&service=demo%3Aping&start=1653032551287000",
+		URL:         "http://" + c.cfg.Sources.Jaeger.ExternalEndpoint + "/search?limit=20&lookback=1h&maxDuration&minDuration&service=demo%3Aping",
 	})
 	corr = append(corr, Correlation{
 		Description: "Profiles View for the same container and time [Parca]",
