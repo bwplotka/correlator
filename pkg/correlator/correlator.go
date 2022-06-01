@@ -183,18 +183,6 @@ groupLoop:
 			`&g1.tab=0&g1.stacked=0&g1.range_input=15m&g1.max_source_resolution=0s&`,
 	})
 
-	defer func() {
-		// In defer, so it has order we want.
-		// TODO(bwplotka) Check if Parca is configured!
-		// TODO(bwplotka): Parse time!
-		corr = append(corr, Correlation{
-			Description: "Profiles View for the same container and time [Parca]",
-			URL: "http://" + c.cfg.Sources.Parca.ExternalEndpoint +
-				`/?currentProfileView=icicle&expression_a=process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%3Adelta%7B` +
-				`%20job%3D%22` + "e2e-correlation-" + string(alert.Labels["job"]) + `%3A8080%22%7D&merge_a=true&time_selection_a=relative:hour|1`,
-		})
-	}()
-
 	// Exemplars path.
 	if exampleRequestID != "" {
 		corr = append(corr, Correlation{
@@ -207,6 +195,14 @@ groupLoop:
 		corr = append(corr, Correlation{
 			Description: "Trace View connected to the Exemplar [Jaeger]",
 			URL:         "http://" + c.cfg.Sources.Jaeger.ExternalEndpoint + "/trace/" + exampleRequestID,
+		})
+		// TODO(bwplotka) Check if Parca is configured!
+		// TODO(bwplotka): Parse time!
+		corr = append(corr, Correlation{
+			Description: "Profiles View for the same container and time [Parca]",
+			URL: "http://" + c.cfg.Sources.Parca.ExternalEndpoint +
+				`/?currentProfileView=icicle&expression_a=process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%3Adelta%7B` +
+				`%20job%3D%22` + "e2e-correlation-" + string(alert.Labels["job"]) + `%3A8080%22%7D&merge_a=true&time_selection_a=relative:hour|1`,
 		})
 		// TODO(bwplotka): Parca storage not always is able to find trace label. Some sampling is happening?
 		corr = append(corr, Correlation{
