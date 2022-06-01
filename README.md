@@ -28,7 +28,7 @@ Requirements: `Go` installed in version 1.17 or higher.
    4. Jaeger UI allowing searching for traces.
    5. Parca UI allowing searching for profiles.
    6. Correlator UI allowing to pass Alerts.
-5. You can pass firing Alert name from Thanos UI Alert tab (it should be firing after minute or two) to Correlator UI, which should return JSON response with useful links and descriptions. 
+5. You can pass firing Alert name from Thanos UI Alert tab (it should be firing after minute or two) to Correlator UI, which should return JSON response with useful links and descriptions. NOTE: We recommend using some JSON prettify Chrome plugin for link formatting.
 6. You can cleanly terminate setup by clicking on URL provided in test output on line that starts with `"Waiting for user HTTP request on`. Alternatively copy this URL manually to browser. You should see EMPTY page. From now on the Go test should finish with "passed" status.
 
 ## Projects Used
